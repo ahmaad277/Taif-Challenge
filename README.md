@@ -4,7 +4,18 @@
 
 ## العرض المباشر
 
-[https://t.azhub.uk](https://t.azhub.uk)
+- **الدومين:** [https://t.azhub.uk](https://t.azhub.uk) (بعد إعداد DNS)
+- **Vercel:** [https://taif-challenge.vercel.app](https://taif-challenge.vercel.app)
+
+## إعداد DNS في Cloudflare (خطوة واحدة)
+
+في [Cloudflare Dashboard](https://dash.cloudflare.com) → `azhub.uk` → **DNS** → **Add record**:
+
+| Type | Name | Content | Proxy |
+|------|------|---------|-------|
+| **A** | `t` | `76.76.21.21` | **DNS only** (سحابة رمادية) |
+
+لا تعدّل سجلات `@` أو `www`. بعد 5–30 دقيقة يفعّل Vercel شهادة HTTPS تلقائياً.
 
 ## التشغيل محلياً
 
