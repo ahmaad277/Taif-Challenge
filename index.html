@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>تحديات طيف</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app-root">
+    <aside id="taif-hero-panel" class="taif-hero-panel" aria-live="polite">
+      <div class="taif-hero-inner taif-hero-composition">
+        <div class="taif-hero-bubble taif-host-bubble taif-host-bubble--from-character">
+          <p class="taif-host-label">طيف</p>
+          <p class="taif-host-text-wrap">
+            <span id="taif-hero-text" class="taif-host-text"></span>
+            <span id="taif-hero-cursor" class="taif-host-cursor hidden" aria-hidden="true">|</span>
+          </p>
+        </div>
+        <img
+          id="taif-hero-img"
+          class="taif-hero-img taif-motion-idle"
+          src="assets/taif/transparent/welcome.png"
+          alt="طيف — مضيفة اللعبة"
+          width="320"
+          height="460"
+        />
+      </div>
+    </aside>
+
+    <main id="app-content">
+      <section id="welcome-screen" class="screen active welcome-screen">
+        <div class="content-panel">
+          <h1 class="game-title">تحديات طيف</h1>
+          <p class="game-subtitle">لعبة جماعية تفاعلية — طيف مضيفتكم في الاستوديو</p>
+          <button id="start-btn" type="button" class="btn btn-primary btn-lg">ابدأ اللعبة</button>
+        </div>
+      </section>
+
+      <section id="teams-screen" class="screen teams-screen">
+        <div class="content-panel">
+          <h2 class="screen-title">إعداد الفرق</h2>
+          <label for="team-count" class="field-label">عدد الفرق</label>
+          <select id="team-count" class="team-count-select ui-input"></select>
+          <div id="team-inputs" class="team-inputs"></div>
+          <p id="teams-error" class="error-message" hidden></p>
+          <div class="btn-group">
+            <button id="confirm-teams-btn" type="button" class="btn btn-primary">تأكيد</button>
+            <button id="back-btn" type="button" class="btn btn-secondary">عودة</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="taif-screen" class="screen taif-intro-screen">
+        <div class="content-panel content-panel--center">
+          <p class="taif-intro-hint">استمعوا لطيف في اللوحة…</p>
+          <button id="taif-start-btn" type="button" class="btn btn-primary btn-lg" hidden>بدأ !</button>
+        </div>
+      </section>
+
+      <section id="game-select-screen" class="screen game-select-screen">
+        <div class="content-panel content-panel--wide">
+          <button id="play-all-random-btn" type="button" class="btn btn-primary">العب جميع الألعاب (ترتيب عشوائي)</button>
+          <div id="game-select-grid" class="game-select-grid"></div>
+          <button id="game-select-home-btn" type="button" class="btn btn-secondary">العودة إلى شاشة البداية</button>
+        </div>
+      </section>
+
+      <section id="surprise-screen" class="screen surprise-screen">
+        <div class="content-panel content-panel--center">
+          <p id="surprise-badge" class="surprise-badge ui-badge">جولة المفاجأة!</p>
+          <p id="surprise-multiplier-hint" class="surprise-multiplier-hint ui-badge">مؤقت ×2 | نقاط ×2</p>
+          <p id="surprise-game-name" class="surprise-game-name"></p>
+        </div>
+      </section>
+
+      <section id="session-end-screen" class="screen session-end-screen">
+        <div id="session-end-confetti" class="session-end-confetti" aria-hidden="true"></div>
+        <div class="content-panel content-panel--center">
+          <h2 class="screen-title">النتائج النهائية</h2>
+          <p id="session-end-winner" class="session-end-winner"></p>
+          <div id="session-end-scores" class="score-board ui-card"></div>
+          <button id="session-play-again-btn" type="button" class="btn btn-primary btn-lg">العب مرة أخرى</button>
+        </div>
+      </section>
+
+      <section id="trivia-category-screen" class="screen">
+        <div class="content-panel content-panel--wide">
+          <h2 class="screen-title">اختر الفئة</h2>
+          <div id="trivia-category-grid" class="game-select-grid trivia-category-grid"></div>
+          <button id="trivia-category-back-btn" type="button" class="btn btn-secondary">عودة</button>
+        </div>
+      </section>
+
+      <section id="trivia-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 id="trivia-screen-title" class="screen-title">الأسئلة العامة</h2>
+              <p id="trivia-team-label" class="trivia-meta game-meta"></p>
+              <p id="trivia-progress" class="trivia-meta game-meta"></p>
+              <div id="trivia-timer" class="trivia-timer game-timer">15</div>
+            </div>
+            <div class="game-play-layout__main">
+              <p id="trivia-question" class="trivia-question"></p>
+            </div>
+            <div class="game-play-layout__side">
+              <div id="trivia-options" class="trivia-options"></div>
+              <p id="trivia-feedback" class="trivia-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="trivia-scores" class="trivia-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="sentence-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">رتب الجملة</h2>
+              <p id="sentence-team-label" class="sentence-meta game-meta"></p>
+              <p id="sentence-progress" class="sentence-meta game-meta"></p>
+              <div id="sentence-timer" class="sentence-timer game-timer">30</div>
+              <p class="sentence-hint game-hint">اضغط كلمتين لتبديل موقعهما، ثم اضغط تحقق</p>
+            </div>
+            <div class="game-play-layout__main">
+              <div id="sentence-words" class="sentence-words"></div>
+            </div>
+            <div class="game-play-layout__side">
+              <p id="sentence-feedback" class="sentence-feedback game-feedback" hidden></p>
+              <button id="sentence-check-btn" type="button" class="btn btn-primary">تحقق</button>
+            </div>
+          </div>
+          <div id="sentence-scores" class="sentence-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="picmerge-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">تحدي الصور</h2>
+              <p id="picmerge-team-label" class="picmerge-meta game-meta"></p>
+              <p id="picmerge-progress" class="picmerge-meta game-meta"></p>
+              <div id="picmerge-timer" class="picmerge-timer game-timer">40</div>
+              <p class="picmerge-hint game-hint">ما الكلمة الناتجة عن دمج الصورتين؟</p>
+            </div>
+            <div class="game-play-layout__main">
+              <div id="picmerge-image-wrap" class="picmerge-image-wrap ui-card">
+                <img id="picmerge-image" class="picmerge-image" src="" alt="تحدي الصور" hidden>
+                <p id="picmerge-image-fallback" class="picmerge-image-fallback" hidden>الصور قادمة قريباً</p>
+              </div>
+            </div>
+            <div class="game-play-layout__side">
+              <div class="picmerge-input-row">
+                <input id="picmerge-input" class="picmerge-input ui-input" type="text" placeholder="اكتب الكلمة…" maxlength="40">
+                <button id="picmerge-submit-btn" type="button" class="btn btn-primary">تخمين</button>
+              </div>
+              <p id="picmerge-feedback" class="picmerge-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="picmerge-scores" class="picmerge-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="spot-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">أوجد الفروق</h2>
+              <p id="spot-team-label" class="spot-meta game-meta"></p>
+              <p id="spot-progress" class="spot-meta game-meta"></p>
+              <div id="spot-timer" class="spot-timer game-timer">60</div>
+              <p id="spot-found-count" class="spot-meta game-meta">0 / 5</p>
+              <p class="spot-hint game-hint">انقر على الفروق في الصورة الأولى (يمين الشاشة)</p>
+            </div>
+            <div class="game-play-layout__main game-play-layout__main--wide">
+              <div class="spot-images-row">
+                <div class="spot-image-column">
+                  <span class="spot-image-label">الأصلية</span>
+                  <div id="spot-left-wrap" class="spot-image-wrap">
+                    <canvas id="spot-left-canvas"></canvas>
+                    <div id="spot-markers" class="spot-markers"></div>
+                  </div>
+                </div>
+                <div class="spot-image-column">
+                  <span class="spot-image-label">المعدّلة</span>
+                  <div class="spot-image-wrap">
+                    <canvas id="spot-right-canvas"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="game-play-layout__side">
+              <p id="spot-feedback" class="spot-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="spot-scores" class="spot-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="memory-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">الذاكرة البصرية</h2>
+              <p id="memory-team-label" class="memory-meta game-meta"></p>
+              <p id="memory-progress" class="memory-meta game-meta"></p>
+              <p id="memory-phase-hint" class="memory-hint game-hint"></p>
+              <div id="memory-timer" class="memory-timer game-timer" hidden>30</div>
+            </div>
+            <div class="game-play-layout__main">
+              <div id="memory-grid" class="memory-grid"></div>
+              <button id="memory-check-btn" type="button" class="btn btn-primary" hidden>تحقق</button>
+            </div>
+            <div class="game-play-layout__side">
+              <p id="memory-feedback" class="memory-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="memory-scores" class="memory-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="creative-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">التحدي الإبداعي</h2>
+              <p id="creative-creator-label" class="creative-meta game-meta"></p>
+              <p id="creative-evaluator-label" class="creative-meta game-meta"></p>
+              <p id="creative-progress" class="creative-meta game-meta"></p>
+              <p id="creative-challenge" class="creative-challenge"></p>
+              <div id="creative-timer" class="creative-timer game-timer">60</div>
+            </div>
+            <div class="game-play-layout__main">
+              <div id="creative-create-section">
+                <textarea id="creative-answer-input" class="creative-answer-input ui-input" placeholder="اكتب إجابتك هنا..." maxlength="500"></textarea>
+                <div id="creative-draw-wrap" class="creative-draw-wrap" hidden>
+                  <canvas id="creative-draw-canvas"></canvas>
+                  <button id="creative-clear-btn" type="button" class="btn btn-secondary">مسح الرسم</button>
+                </div>
+                <button id="creative-done-btn" type="button" class="btn btn-primary">انتهيت</button>
+              </div>
+              <div id="creative-rate-section" class="creative-rate-section" hidden>
+                <p class="creative-hint game-hint">قيّم إجابة الفريق من 1 إلى 10</p>
+                <div id="creative-answer-preview" class="creative-answer-preview ui-card"></div>
+                <div id="creative-rating-buttons" class="creative-rating-buttons"></div>
+              </div>
+            </div>
+            <div class="game-play-layout__side">
+              <p id="creative-feedback" class="creative-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="creative-scores" class="creative-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="password-screen" class="screen game-screen">
+        <div class="content-panel content-panel--game">
+          <div class="game-play-layout">
+            <div class="game-play-layout__meta">
+              <h2 class="screen-title">كلمة السر</h2>
+              <p id="password-describer-label" class="password-meta game-meta"></p>
+              <p id="password-guesser-label" class="password-meta game-meta"></p>
+              <p id="password-progress" class="password-meta game-meta"></p>
+              <p id="password-phase-hint" class="password-hint game-hint"></p>
+              <div id="password-timer" class="password-timer game-timer">30</div>
+            </div>
+            <div class="game-play-layout__main">
+              <div id="password-read-section">
+                <p id="password-secret-word" class="password-secret-word ui-card"></p>
+              </div>
+              <div id="password-guess-section" class="password-guess-section" hidden>
+                <input id="password-guess-input" class="password-guess-input ui-input" type="text" placeholder="اكتب التخمين..." maxlength="40">
+                <button id="password-submit-btn" type="button" class="btn btn-primary">تخمين</button>
+              </div>
+            </div>
+            <div class="game-play-layout__side">
+              <p id="password-feedback" class="password-feedback game-feedback" hidden></p>
+            </div>
+          </div>
+          <div id="password-scores" class="password-scores game-scores"></div>
+        </div>
+      </section>
+
+      <section id="partial-results-screen" class="screen partial-results-screen">
+        <div class="content-panel content-panel--center">
+          <h2 class="screen-title">نتائج جزئية</h2>
+          <p id="partial-results-subtitle" class="partial-results-subtitle"></p>
+          <div id="partial-results-scores" class="score-board ui-card"></div>
+          <div class="btn-group">
+            <button id="partial-results-back-btn" type="button" class="btn btn-secondary">عودة</button>
+            <button id="partial-results-continue-btn" type="button" class="btn btn-primary">التالي</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <aside id="taif-dock" class="taif-dock" hidden aria-live="polite">
+    <div id="taif-stage" class="taif-stage" data-layout="compact">
+      <div class="taif-dock-bar taif-host-bar">
+        <div id="taif-actor-wrap" class="taif-actor-wrap">
+          <img
+            id="taif-character-img"
+            class="taif-character-img taif-motion-idle"
+            src="assets/taif/transparent/confident.png"
+            alt=""
+            width="120"
+            height="170"
+          />
+          <div id="taif-lottie" class="taif-lottie" hidden aria-hidden="true"></div>
+        </div>
+        <div class="taif-host-bubble taif-host-bubble--from-character">
+          <p id="taif-host-label" class="taif-host-label">طيف</p>
+          <p class="taif-host-text-wrap">
+            <span id="taif-host-text" class="taif-host-text"></span>
+            <span id="taif-host-cursor" class="taif-host-cursor hidden" aria-hidden="true">|</span>
+          </p>
+        </div>
+        <div id="taif-host-timer" class="taif-host-timer" hidden aria-live="polite">30</div>
+      </div>
+    </div>
+  </aside>
+
+  <script src="js/icon-utils.js"></script>
+  <script src="js/vendor/lottie.min.js"></script>
+  <script src="js/trivia-data.js" defer></script>
+  <script src="js/picmerge-data.js" defer></script>
+  <script src="js/script.js" defer></script>
+  <script src="js/taif-actor.js" defer></script>
+</body>
+</html>
