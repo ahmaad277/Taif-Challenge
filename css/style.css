@@ -56,6 +56,8 @@
 
 html {
   background-color: var(--stage-deep);
+  /* درجة خط أساسية أكبر — كل القياسات بوحدة rem فتكبر الخطوط بتناسب موحّد */
+  font-size: 17px;
 }
 
 body {
