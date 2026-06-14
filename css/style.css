@@ -49,12 +49,24 @@
   padding: 0;
 }
 
+/* السمة [hidden] يجب أن تتقدّم دائماً على أي قاعدة display (flex/grid/block) */
+[hidden] {
+  display: none !important;
+}
+
+html {
+  background-color: var(--stage-deep);
+}
+
 body {
   font-family: "Tajawal", "Segoe UI", Tahoma, sans-serif;
+  /* خلفية بنفسجية موحّدة ومتماثلة — متمركزة أفقياً فلا تظهر بقع أو حواف */
   background-color: var(--stage-deep);
   background-image:
-    radial-gradient(ellipse at 80% 0%, rgba(232, 67, 147, 0.12), transparent 50%),
-    radial-gradient(ellipse at 10% 100%, rgba(240, 199, 94, 0.08), transparent 45%);
+    radial-gradient(ellipse 80% 55% at 50% -8%, rgba(232, 67, 147, 0.16), transparent 60%),
+    radial-gradient(ellipse 80% 55% at 50% 108%, rgba(240, 199, 94, 0.08), transparent 60%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--text-color);
   min-height: 100dvh;
   margin: 0;
@@ -133,10 +145,10 @@ body.taif-layout-hero #app-content {
 .taif-hero-composition {
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
   width: auto;
-  max-width: none;
+  max-width: 100%;
 }
 
 .taif-hero-composition .taif-hero-img {
@@ -148,30 +160,35 @@ body.taif-layout-hero #app-content {
   order: 2;
 }
 
+/* حاوية ثابتة الأبعاد لشخصية طيف: نفس النسبة في كل الشاشات + object-fit: contain */
 .taif-hero-img {
   width: auto;
-  height: clamp(180px, 42vh, 380px);
+  height: clamp(220px, 38vh, 340px);
+  aspect-ratio: 660 / 820;
   max-width: 100%;
   object-fit: contain;
   object-position: bottom center;
-  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.4));
   transform-origin: bottom center;
 }
 
-.taif-hero-bubble {
-  flex: 0 1 min(16rem, 38vw);
-  width: auto;
-  max-width: min(16rem, 38vw);
+/* فقاعة الحوار في الوضع البطولي — عرض محدود لتوازن التكوين (تتقدّم على قاعدة .taif-host-bubble) */
+.taif-hero-composition .taif-hero-bubble {
+  flex: 0 0 auto;
+  width: min(15rem, 34vw);
+  max-width: min(15rem, 34vw);
+  min-width: 0;
   align-self: center;
-  margin-bottom: 2rem;
+  margin-bottom: 0;
 }
 
 .taif-dock {
+  /* توسيط ثابت أسفل-وسط الشاشة بطريقة لا تتأثر باتجاه RTL (بدل left:50%+translate) */
   position: fixed;
-  left: 50%;
-  right: auto;
-  inset-inline: auto;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  transform: none;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   z-index: 400;
   width: min(96vw, 36rem);
@@ -482,10 +499,10 @@ body:has(.surprise-screen.active) .taif-host-bubble--from-character::after {
 @keyframes taifIdleBob {
   0%,
   100% {
-    transform: translateY(0) scale(1);
+    transform: translateY(0) rotate(-1.4deg);
   }
   50% {
-    transform: translateY(-5px) scale(1.02);
+    transform: translateY(-8px) rotate(1.4deg);
   }
 }
 
@@ -546,7 +563,7 @@ body:has(.surprise-screen.active) .taif-host-bubble--from-character::after {
 }
 
 .taif-motion-idle {
-  animation: taifIdleBob 3s ease-in-out infinite;
+  animation: taifIdleBob 4.5s ease-in-out infinite;
 }
 
 .taif-motion-talk {
@@ -1309,14 +1326,20 @@ body.surprise-round-active .screen.active .screen-title::after {
   background-color: var(--surface-inset);
 }
 
-.spot-image-wrap canvas {
+.spot-scene {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 42vh;
+  aspect-ratio: 4 / 3;
+  line-height: 0;
 }
 
-#spot-left-canvas {
+.spot-scene svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#spot-left-scene {
   cursor: crosshair;
 }
 
@@ -1714,10 +1737,11 @@ body.surprise-round-active .screen.active .screen-title::after {
   justify-content: center;
   border-radius: 0.5rem;
   overflow: hidden;
-  background-color: var(--surface-inset);
+  background-color: transparent;
 }
 
-.game-select-thumb canvas {
+.game-select-thumb canvas,
+.game-select-thumb svg {
   display: block;
   width: 100%;
   height: 100%;
@@ -2204,10 +2228,6 @@ body.session-celebrating .session-end-screen.active {
   font-weight: 600;
   color: var(--text-secondary);
   direction: rtl;
-}
-
-.spot-image-wrap canvas {
-  max-height: 45vh;
 }
 
 .spot-marker {
