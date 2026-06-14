@@ -13,7 +13,10 @@ const gameState = {
     feedbackTimeoutId: null,
     timeLeft: 15,
     currentQuestion: null,
-    selectedCategoryId: null
+    selectedCategoryId: null,
+    playMode: 'single-cat',       // 'random-all' | 'multi-cat' | 'single-cat'
+    selectedCategoryIds: [],       // للنمط الثاني: الفئات المختارة
+    questionPool: []               // مجمع الأسئلة للنمطين الأول والثاني
   },
   sentence: {
     shuffledIndices: [],
@@ -301,8 +304,8 @@ const GAME_REGISTRY = [
   {
     id: 'trivia',
     name: 'الأسئلة العامة',
-    screenId: 'trivia-category-screen',
-    start: () => startTriviaCategorySelect(),
+    screenId: 'trivia-mode-screen',
+    start: () => startTriviaModeSelect(),
     drawThumb: drawTriviaThumb,
     enabled: true
   },
@@ -705,13 +708,126 @@ function renderTriviaCategoryScreen() {
   });
 }
 
+/* ——— أنماط الأسئلة العامة الثلاثة ——— */
+
+function startTriviaModeSelect() {
+  renderTriviaModeScreen();
+}
+
+function renderTriviaModeScreen() {
+  const grid = document.getElementById('trivia-mode-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const modes = [
+    {
+      id: 'random-all',
+      name: 'عشوائي شامل',
+      desc: 'أسئلة من جميع الفئات بشكل عشوائي',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(232,67,147,0.15)" stroke="rgba(232,67,147,0.5)" stroke-width="1.5"/><g stroke="#e84393" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M14 20h4l14 16h4"/><path d="M36 20h4M40 36h-4"/><path d="M14 36l10-8"/><circle cx="38" cy="20" r="2" fill="#e84393"/><circle cx="38" cy="36" r="2" fill="#e84393"/></g></svg>`
+    },
+    {
+      id: 'multi-cat',
+      name: 'فئات مختارة',
+      desc: 'اختر الفئات التي تريد اللعب فيها',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(112,72,232,0.15)" stroke="rgba(112,72,232,0.5)" stroke-width="1.5"/><g stroke="#7048e8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="12" y="16" width="10" height="10" rx="2"/><rect x="12" y="30" width="10" height="10" rx="2"/><path d="M27 21h17M27 35h17"/><path d="M14 21l2 2 4-4M14 35l2 2 4-4" stroke="#7048e8"/></g></svg>`
+    },
+    {
+      id: 'single-cat',
+      name: 'فئة واحدة',
+      desc: 'اختر فئة محددة للتركيز فيها',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(240,199,94,0.12)" stroke="rgba(240,199,94,0.45)" stroke-width="1.5"/><g stroke="#f0c75e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="28" cy="28" r="14"/><circle cx="28" cy="28" r="7"/><circle cx="28" cy="28" r="2" fill="#f0c75e"/></g></svg>`
+    }
+  ];
+
+  modes.forEach((mode) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'trivia-mode-card';
+    card.innerHTML = `
+      <div class="trivia-mode-icon">${mode.svg}</div>
+      <div class="trivia-mode-text">
+        <span class="trivia-mode-name">${mode.name}</span>
+        <span class="trivia-mode-desc">${mode.desc}</span>
+      </div>`;
+    card.addEventListener('click', () => handleTriviaModeSelect(mode.id));
+    grid.appendChild(card);
+  });
+}
+
+function handleTriviaModeSelect(modeId) {
+  gameState.trivia.playMode = modeId;
+
+  if (modeId === 'random-all') {
+    gameState.trivia.selectedCategoryIds = TRIVIA_CATEGORIES
+      .filter((c) => isTriviaCategoryPlayable(c.id))
+      .map((c) => c.id);
+    showScreen('trivia-screen');
+    startTriviaGame();
+  } else if (modeId === 'multi-cat') {
+    renderTriviaMultiCategoryScreen();
+    showScreen('trivia-multi-cat-screen');
+  } else {
+    renderTriviaCategoryScreen();
+    showScreen('trivia-category-screen');
+  }
+}
+
+function renderTriviaMultiCategoryScreen() {
+  const grid = document.getElementById('trivia-multi-cat-grid');
+  const startBtn = document.getElementById('trivia-multi-cat-start-btn');
+  if (!grid || !startBtn) return;
+
+  gameState.trivia.selectedCategoryIds = [];
+  grid.innerHTML = '';
+  startBtn.disabled = true;
+
+  TRIVIA_CATEGORIES.forEach((category) => {
+    if (!isTriviaCategoryPlayable(category.id)) return;
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'game-select-card';
+    card.dataset.categoryId = category.id;
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'game-select-thumb';
+    thumbWrap.innerHTML = (window.TRIVIA_ICON_SVG && window.TRIVIA_ICON_SVG[category.id]) || '';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'game-select-name';
+    nameEl.textContent = category.name;
+
+    card.appendChild(thumbWrap);
+    card.appendChild(nameEl);
+
+    card.addEventListener('click', () => {
+      const ids = gameState.trivia.selectedCategoryIds;
+      const idx = ids.indexOf(category.id);
+      if (idx === -1) {
+        ids.push(category.id);
+        card.classList.add('trivia-cat-selected');
+      } else {
+        ids.splice(idx, 1);
+        card.classList.remove('trivia-cat-selected');
+      }
+      startBtn.disabled = ids.length === 0;
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+/* النمط القديم: فئة واحدة (يُبقي التوافق مع أي مسارات أخرى) */
 function startTriviaCategorySelect() {
+  gameState.trivia.playMode = 'single-cat';
   renderTriviaCategoryScreen();
 }
 
 function startTriviaWithCategory(categoryId) {
   if (!isTriviaCategoryPlayable(categoryId)) return;
 
+  gameState.trivia.playMode = 'single-cat';
   gameState.trivia.selectedCategoryId = categoryId;
   showScreen('trivia-screen');
   startTriviaGame();
@@ -719,11 +835,16 @@ function startTriviaWithCategory(categoryId) {
 
 function updateTriviaScreenTitle() {
   const titleEl = document.getElementById('trivia-screen-title');
-  const category = getTriviaCategoryById(gameState.trivia.selectedCategoryId);
-  if (titleEl) {
-    titleEl.textContent = category
-      ? `الأسئلة العامة — ${category.name}`
-      : 'الأسئلة العامة';
+  if (!titleEl) return;
+  const mode = gameState.trivia.playMode;
+  if (mode === 'random-all') {
+    titleEl.textContent = 'الأسئلة العامة — عشوائي شامل';
+  } else if (mode === 'multi-cat') {
+    const count = gameState.trivia.selectedCategoryIds.length;
+    titleEl.textContent = `الأسئلة العامة — ${count} فئ${count === 1 ? 'ة' : 'ات'}`;
+  } else {
+    const category = getTriviaCategoryById(gameState.trivia.selectedCategoryId);
+    titleEl.textContent = category ? `الأسئلة العامة — ${category.name}` : 'الأسئلة العامة';
   }
 }
 
@@ -893,20 +1014,30 @@ function findActiveTeamIndex() {
 
 function getNextQuestion() {
   const { trivia } = gameState;
-  const pool = getTriviaQuestionsForCategory(trivia.selectedCategoryId);
 
-  if (pool.length === 0) {
-    return null;
+  if (trivia.playMode === 'single-cat') {
+    // النمط الثالث: مجمع فئة واحدة بمؤشرات مخلوطة
+    const pool = getTriviaQuestionsForCategory(trivia.selectedCategoryId);
+    if (pool.length === 0) return null;
+    if (trivia.poolPointer >= trivia.shuffledIndices.length) {
+      trivia.shuffledIndices = shuffleArray(pool.map((_, index) => index));
+      trivia.poolPointer = 0;
+    }
+    const q = pool[trivia.shuffledIndices[trivia.poolPointer]];
+    trivia.poolPointer += 1;
+    return q;
   }
 
-  if (trivia.poolPointer >= trivia.shuffledIndices.length) {
-    trivia.shuffledIndices = shuffleArray(pool.map((_, index) => index));
+  // النمطان الأول والثاني: مجمع مدمج مسطّح
+  const pool = trivia.questionPool;
+  if (!pool || pool.length === 0) return null;
+  if (trivia.poolPointer >= pool.length) {
+    trivia.questionPool = shuffleArray([...pool]);
     trivia.poolPointer = 0;
   }
-
-  const questionIndex = trivia.shuffledIndices[trivia.poolPointer];
+  const q = trivia.questionPool[trivia.poolPointer];
   trivia.poolPointer += 1;
-  return pool[questionIndex];
+  return q;
 }
 
 function updateTriviaScoresDisplay() {
@@ -3658,16 +3789,29 @@ function startTriviaGame() {
   clearTriviaTimers();
   hideTriviaFeedback();
 
-  const pool = getTriviaQuestionsForCategory(gameState.trivia.selectedCategoryId);
-  gameState.trivia.shuffledIndices = shuffleArray(pool.map((_, index) => index));
-  gameState.trivia.poolPointer = 0;
-  gameState.trivia.currentTeamIndex = 0;
-  gameState.trivia.teamQuestionCounts = {};
-  gameState.trivia.answered = false;
-  gameState.trivia.currentQuestion = null;
+  const { trivia } = gameState;
+
+  if (trivia.playMode === 'single-cat') {
+    const pool = getTriviaQuestionsForCategory(trivia.selectedCategoryId);
+    trivia.shuffledIndices = shuffleArray(pool.map((_, index) => index));
+    trivia.questionPool = pool;
+  } else {
+    // النمطان 'random-all' و 'multi-cat': مجمع مدمج مخلوط
+    const allQ = (trivia.selectedCategoryIds || []).flatMap(
+      (id) => getTriviaQuestionsForCategory(id)
+    );
+    trivia.questionPool = shuffleArray(allQ);
+    trivia.shuffledIndices = [];
+  }
+
+  trivia.poolPointer = 0;
+  trivia.currentTeamIndex = 0;
+  trivia.teamQuestionCounts = {};
+  trivia.answered = false;
+  trivia.currentQuestion = null;
 
   gameState.teams.forEach((team) => {
-    gameState.trivia.teamQuestionCounts[team] = 0;
+    trivia.teamQuestionCounts[team] = 0;
   });
 
   updateTriviaScreenTitle();
@@ -4173,11 +4317,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const triviaModeBackBtn = document.getElementById('trivia-mode-back-btn');
+  if (triviaModeBackBtn) {
+    triviaModeBackBtn.addEventListener('click', () => {
+      showScreen('game-select-screen');
+      renderGameSelectScreen();
+    });
+  }
+
+  const triviaMultiCatBackBtn = document.getElementById('trivia-multi-cat-back-btn');
+  if (triviaMultiCatBackBtn) {
+    triviaMultiCatBackBtn.addEventListener('click', () => {
+      showScreen('trivia-mode-screen');
+    });
+  }
+
+  const triviaMultiCatStartBtn = document.getElementById('trivia-multi-cat-start-btn');
+  if (triviaMultiCatStartBtn) {
+    triviaMultiCatStartBtn.addEventListener('click', () => {
+      if (gameState.trivia.selectedCategoryIds.length === 0) return;
+      showScreen('trivia-screen');
+      startTriviaGame();
+    });
+  }
+
   const triviaCategoryBackBtn = document.getElementById('trivia-category-back-btn');
   if (triviaCategoryBackBtn) {
     triviaCategoryBackBtn.addEventListener('click', () => {
-      showScreen('game-select-screen');
-      renderGameSelectScreen();
+      showScreen('trivia-mode-screen');
     });
   }
 

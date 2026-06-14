@@ -1081,6 +1081,73 @@ body.surprise-round-active .screen.active .screen-title::after {
   color: #ff4757;
 }
 
+/* ——— أنماط لعب الأسئلة العامة ——— */
+
+.trivia-mode-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 36rem;
+}
+
+.trivia-mode-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(240, 199, 94, 0.2);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-color);
+  text-align: right;
+  transition: border-color 0.18s, background 0.18s, transform 0.15s;
+}
+
+.trivia-mode-card:hover {
+  border-color: var(--accent-color);
+  background: rgba(240, 199, 94, 0.07);
+  transform: translateY(-2px);
+}
+
+.trivia-mode-card:active {
+  transform: scale(0.98);
+}
+
+.trivia-mode-icon {
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.trivia-mode-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--spotlight-soft);
+  display: block;
+}
+
+.trivia-mode-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted, rgba(255,255,255,0.55));
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.trivia-mode-text {
+  display: flex;
+  flex-direction: column;
+}
+
+/* حالة التحديد في نمط الفئات المتعددة */
+.game-select-card.trivia-cat-selected {
+  border-color: var(--accent-color);
+  background: rgba(240, 199, 94, 0.13);
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
 .trivia-scores {
   display: flex;
   flex-wrap: wrap;
