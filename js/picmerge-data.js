@@ -168,11 +168,5 @@ const PICMERGE_PUZZLES = [
     answer: 'كراث',
     image: 'assets/picmerge/028.png',
     aliases: []
-  },
-  {
-    id: '029',
-    answer: 'بندول',
-    image: 'assets/picmerge/029.png',
-    aliases: []
   }
 ];
