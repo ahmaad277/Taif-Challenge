@@ -2242,6 +2242,17 @@ body.session-celebrating .session-end-screen.active {
   min-height: auto;
 }
 
+.game-back-btn {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.75rem;
+  opacity: 0.75;
+}
+
+.game-back-btn:hover {
+  opacity: 1;
+}
+
 .game-select-card {
   min-height: 7rem;
   justify-content: center;

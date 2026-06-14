@@ -175,7 +175,7 @@ function showScreen(screenId) {
       clearTypewriter();
     }
   } else if (startBtn) {
-    startBtn.hidden = true;
+    startBtn.hidden = false;
   }
 
   document.querySelectorAll('.screen').forEach((screen) => {
@@ -494,6 +494,17 @@ function peekNextGameId() {
   }
 
   return null;
+}
+
+function stopAllGameTimers() {
+  ['trivia', 'sentence', 'picmerge', 'spot', 'memory', 'creative', 'password'].forEach((g) => {
+    const s = gameState[g];
+    if (!s) return;
+    if (s.timerId) { clearInterval(s.timerId); s.timerId = null; }
+    if (s.memorizeTimerId) { clearInterval(s.memorizeTimerId); s.memorizeTimerId = null; }
+    if (s.readTimerId) { clearInterval(s.readTimerId); s.readTimerId = null; }
+    if (s.feedbackTimeoutId) { clearTimeout(s.feedbackTimeoutId); s.feedbackTimeoutId = null; }
+  });
 }
 
 function returnToGameSelect() {
@@ -4211,9 +4222,6 @@ function startTaifIntro() {
   clearTypewriter();
 
   const startBtn = document.getElementById('taif-start-btn');
-  if (startBtn) {
-    startBtn.hidden = true;
-  }
 
   const { text: textEl, heroText } = getTaifStageElements();
   if (textEl) textEl.textContent = '';
@@ -4427,4 +4435,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  document.querySelectorAll('.game-screen').forEach((screen) => {
+    const panel = screen.querySelector('.content-panel--game');
+    if (!panel) return;
+    const scoresEl = panel.querySelector('.game-scores');
+    const backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'btn btn-secondary game-back-btn';
+    backBtn.textContent = 'عودة للقائمة';
+    if (scoresEl) {
+      panel.insertBefore(backBtn, scoresEl);
+    } else {
+      panel.append(backBtn);
+    }
+    backBtn.addEventListener('click', () => {
+      stopAllGameTimers();
+      returnToGameSelect();
+    });
+  });
 });
