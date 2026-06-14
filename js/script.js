@@ -2307,7 +2307,8 @@ function updateSpotFoundCount() {
   if (!countEl) return;
 
   const found = gameState.spot.foundDiffIndices.length;
-  countEl.textContent = `${found} / 5`;
+  const total = gameState.spot.currentPuzzle ? gameState.spot.currentPuzzle.differences.length : 5;
+  countEl.textContent = `${found} / ${total}`;
 }
 
 function renderSpotCanvases(puzzle) {
@@ -2315,8 +2316,16 @@ function renderSpotCanvases(puzzle) {
   const rightScene = document.getElementById('spot-right-scene');
   if (!leftScene || !rightScene) return;
 
-  leftScene.innerHTML = puzzle.base;
-  rightScene.innerHTML = puzzle.modified;
+  if (puzzle.type === 'photo') {
+    leftScene.innerHTML = `<img src="${puzzle.base}" class="spot-photo" alt="الأصلية" draggable="false">`;
+    rightScene.innerHTML = `<img src="${puzzle.modified}" class="spot-photo" alt="المعدّلة" draggable="false">`;
+  } else if (puzzle.type === 'photo-overlay') {
+    leftScene.innerHTML = `<img src="${puzzle.base}" class="spot-photo" alt="الأصلية" draggable="false">`;
+    rightScene.innerHTML = `<img src="${puzzle.base}" class="spot-photo" alt="المعدّلة" draggable="false"><svg class="spot-overlay-svg" viewBox="0 0 100 75" preserveAspectRatio="xMidYMid meet">${puzzle.overlays}</svg>`;
+  } else {
+    leftScene.innerHTML = puzzle.base;
+    rightScene.innerHTML = puzzle.modified;
+  }
 }
 
 function clearSpotMarkers() {
@@ -2445,7 +2454,7 @@ function handleSpotCanvasClick(event) {
   updateSpotFoundCount();
   showSpotFeedback(`\u0635\u062d! +${points} \u0646\u0642\u0627\u0637`, true);
 
-  if (spot.foundDiffIndices.length >= 5) {
+  if (spot.foundDiffIndices.length >= spot.currentPuzzle.differences.length) {
     finishSpotRound('\u0623\u062d\u0633\u0646\u062a! \u0648\u062c\u062f\u062a \u062c\u0645\u064a\u0639 \u0627\u0644\u0641\u0631\u0648\u0642', true);
   }
 }
@@ -2454,10 +2463,11 @@ function handleSpotTimeout() {
   if (!gameState.spot.roundActive) return;
 
   const found = gameState.spot.foundDiffIndices.length;
-  const success = found >= 5;
+  const total = gameState.spot.currentPuzzle ? gameState.spot.currentPuzzle.differences.length : 5;
+  const success = found >= total;
   const message = success
     ? '\u0623\u062d\u0633\u0646\u062a! \u0648\u062c\u062f\u062a \u062c\u0645\u064a\u0639 \u0627\u0644\u0641\u0631\u0648\u0642'
-    : `\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0648\u0642\u062a! \u0648\u062c\u062f\u062a ${found} \u0645\u0646 5`;
+    : `\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0648\u0642\u062a! \u0648\u062c\u062f\u062a ${found} \u0645\u0646 ${total}`;
   if (!success) {
     playLoseSound();
   }

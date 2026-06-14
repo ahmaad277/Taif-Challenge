@@ -1425,12 +1425,32 @@ body.surprise-round-active .screen.active .screen-title::after {
   width: 100%;
   aspect-ratio: 4 / 3;
   line-height: 0;
+  position: relative;
 }
 
 .spot-scene svg {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.spot-overlay-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.spot-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 #spot-left-scene {
