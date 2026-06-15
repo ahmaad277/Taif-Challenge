@@ -857,6 +857,12 @@ body:has(.surprise-screen.active) .taif-host-bubble {
   font-weight: 700;
 }
 
+.game-screen .screen-title {
+  font-size: clamp(1.5rem, 5.5vw, 1.875rem);
+  line-height: 1.2;
+  margin: 0;
+}
+
 .field-label {
   font-size: 1rem;
   color: var(--subtitle-color);
@@ -1288,12 +1294,13 @@ body.surprise-round-active .screen.active .screen-title::after {
 .picmerge-image-wrap {
   width: 100%;
   max-width: min(100%, 640px);
-  margin: 0 auto 1rem;
+  margin: 0 auto;
   border-radius: 0.75rem;
   overflow: hidden;
   border: 2px solid var(--border-muted);
   background-color: var(--surface-inset);
-  min-height: min(38vh, 14rem);
+  min-height: min(22vh, 9rem);
+  max-height: min(34vh, 16rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1301,7 +1308,8 @@ body.surprise-round-active .screen.active .screen-title::after {
 
 .picmerge-image {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-height: min(34vh, 16rem);
   display: block;
   object-fit: contain;
 }
@@ -1414,8 +1422,8 @@ body.surprise-round-active .screen.active .screen-title::after {
   flex: 1;
   min-width: 12rem;
   max-width: 24rem;
-  border-radius: 0.5rem;
-  border: 2px solid var(--subtitle-color);
+  border-radius: 0.75rem;
+  border: 2px solid var(--border-muted);
   overflow: hidden;
   background-color: var(--surface-inset);
 }
@@ -1453,7 +1461,7 @@ body.surprise-round-active .screen.active .screen-title::after {
   pointer-events: none;
 }
 
-#spot-left-scene {
+#spot-right-scene {
   cursor: crosshair;
 }
 
@@ -2258,8 +2266,41 @@ body.session-celebrating .session-end-screen.active {
   color: var(--text-color);
 }
 
+/* ——— Consistent game-screen frame: every game panel fills the same
+       viewport space above the dock, with a uniform internal rhythm ——— */
 .game-screen .content-panel--game {
-  min-height: auto;
+  min-height: calc(
+    100dvh - var(--taif-dock-height, 0px)
+    - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    - var(--space-xl)
+  );
+  justify-content: flex-start;
+  gap: var(--space-md);
+}
+
+.game-screen .game-play-layout {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: var(--space-md);
+}
+
+/* Main content sits directly under the meta (no large centering gap);
+   the pinned scores absorb the remaining space at the bottom. */
+.game-screen .game-play-layout__main,
+.game-screen .game-play-layout__main--wide {
+  flex: 0 1 auto;
+  justify-content: flex-start;
+}
+
+/* Scores always sit pinned at the bottom edge of the panel. */
+.game-screen .game-scores {
+  margin-top: auto;
+}
+
+#spot-found-count {
+  direction: ltr;
+  font-weight: 700;
+  color: var(--text-color);
 }
 
 .game-back-btn {
@@ -2319,7 +2360,7 @@ body.session-celebrating .session-end-screen.active {
 }
 
 .memory-grid {
-  width: min(85vw, 28rem);
+  width: min(64vw, 17rem);
   max-width: none;
 }
 
@@ -2355,6 +2396,19 @@ body.session-celebrating .session-end-screen.active {
   direction: rtl;
 }
 
+/* Keep the two panels side-by-side on phones so the whole puzzle
+   fits in one screen above the dock (no scrolling onto Taif). */
+@media (max-width: 560px) {
+  .spot-images-row {
+    flex-wrap: nowrap;
+    gap: var(--space-sm);
+  }
+
+  .spot-image-column {
+    min-width: 0;
+  }
+}
+
 .spot-marker {
   width: var(--icon-sm);
   height: var(--icon-sm);
@@ -2371,7 +2425,8 @@ body.session-celebrating .session-end-screen.active {
 }
 
 .creative-answer-input {
-  min-height: 12rem;
+  min-height: 7rem;
+  max-height: 26vh;
 }
 
 .creative-rating-buttons {
@@ -2398,6 +2453,21 @@ body.session-celebrating .session-end-screen.active {
 
 .taif-stage[data-layout="compact"] .taif-host-bubble {
   max-width: min(55vw, 22rem);
+}
+
+/* ——— Gameplay dock: slim bar so Taif never covers the game ——— */
+.taif-dock .taif-stage[data-layout="compact"],
+.taif-dock .taif-stage[data-layout="grid"] {
+  --taif-char-compact: clamp(54px, 9vh, 74px);
+  --taif-char-grid: 58px;
+  --taif-timer-size: 3.7rem;
+  --taif-timer-font: 1.7rem;
+}
+
+/* Make the gameplay timer read as the dock's focal point */
+.taif-dock .taif-host-timer {
+  border-width: 4px;
+  box-shadow: 0 0 0 3px rgba(232, 67, 147, 0.18), 0 4px 18px rgba(232, 67, 147, 0.4);
 }
 
 @media (min-width: 835px) and (orientation: landscape) {

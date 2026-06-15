@@ -2430,7 +2430,7 @@ function handleSpotCanvasClick(event) {
   const { spot } = gameState;
   if (!spot.roundActive || !spot.currentPuzzle) return;
 
-  const sceneEl = document.getElementById('spot-left-scene');
+  const sceneEl = document.getElementById('spot-right-scene');
   if (!sceneEl) return;
 
   const { x, y } = getSpotCanvasRelativeCoords(sceneEl, event);
@@ -4384,9 +4384,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const spotLeftScene = document.getElementById('spot-left-scene');
-  if (spotLeftScene) {
-    spotLeftScene.addEventListener('click', handleSpotCanvasClick);
+  const spotClickScene = document.getElementById('spot-right-scene');
+  if (spotClickScene) {
+    spotClickScene.addEventListener('click', handleSpotCanvasClick);
   }
 
   const memoryCheckBtn = document.getElementById('memory-check-btn');
