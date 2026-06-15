@@ -479,10 +479,10 @@ body:has(.surprise-screen.active) .taif-host-bubble--from-character::after {
 .taif-stage[data-layout="compact"] .taif-host-text-wrap,
 .taif-stage[data-layout="grid"] .taif-host-text-wrap {
   font-size: 0.95rem;
-  line-height: 1.5;
+  line-height: 1.45;
   min-height: auto;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2452,7 +2452,7 @@ body.session-celebrating .session-end-screen.active {
 }
 
 .taif-stage[data-layout="compact"] .taif-host-bubble {
-  max-width: min(55vw, 22rem);
+  max-width: min(62vw, 24rem);
 }
 
 /* ——— Gameplay dock: slim bar so Taif never covers the game ——— */
