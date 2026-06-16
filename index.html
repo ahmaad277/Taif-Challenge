@@ -133,64 +133,63 @@
 
       <section id="trivia-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
-          <div class="game-play-layout">
-            <div class="game-play-layout__meta">
+          <div class="game-play-layout game-play-layout--stacked">
+            <div class="game-play-layout__meta game-play-layout__meta--trivia">
               <h2 id="trivia-screen-title" class="screen-title">الأسئلة العامة</h2>
               <p id="trivia-team-label" class="trivia-meta game-meta"></p>
-              <p id="trivia-progress" class="trivia-meta game-meta"></p>
+              <p id="trivia-question" class="trivia-question"></p>
               <div id="trivia-timer" class="trivia-timer game-timer">15</div>
             </div>
-            <div class="game-play-layout__main">
-              <p id="trivia-question" class="trivia-question"></p>
-            </div>
-            <div class="game-play-layout__side">
+            <div class="game-play-layout__main game-play-layout__main--centered">
               <div id="trivia-options" class="trivia-options"></div>
               <p id="trivia-feedback" class="trivia-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="trivia-scores" class="trivia-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="trivia-scores" class="trivia-scores game-scores"></div>
+            <p id="trivia-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
       <section id="sentence-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
-          <div class="game-play-layout">
+          <div class="game-play-layout game-play-layout--stacked">
             <div class="game-play-layout__meta">
               <h2 class="screen-title">رتب الجملة</h2>
               <p id="sentence-team-label" class="sentence-meta game-meta"></p>
-              <p id="sentence-progress" class="sentence-meta game-meta"></p>
               <div id="sentence-timer" class="sentence-timer game-timer">30</div>
-              <p class="sentence-hint game-hint">اضغط كلمتين لتبديل موقعهما، ثم اضغط تحقق</p>
+              <p class="sentence-hint game-hint">اسحب الكلمات لترتيب الجملة، ثم اضغط تحقق</p>
             </div>
-            <div class="game-play-layout__main">
-              <div id="sentence-words" class="sentence-words"></div>
-            </div>
-            <div class="game-play-layout__side">
-              <p id="sentence-feedback" class="sentence-feedback game-feedback" hidden></p>
+            <div class="game-play-layout__main sentence-play-area">
+              <div id="sentence-words" class="sentence-words" role="list" aria-label="كلمات الجملة"></div>
               <button id="sentence-check-btn" type="button" class="btn btn-primary">تحقق</button>
+              <p id="sentence-feedback" class="sentence-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="sentence-scores" class="sentence-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="sentence-scores" class="sentence-scores game-scores"></div>
+            <p id="sentence-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
       <section id="picmerge-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
-          <div class="game-play-layout">
+          <div class="game-play-layout game-play-layout--stacked">
             <div class="game-play-layout__meta">
               <h2 class="screen-title">تحدي الصور</h2>
               <p id="picmerge-team-label" class="picmerge-meta game-meta"></p>
-              <p id="picmerge-progress" class="picmerge-meta game-meta"></p>
               <div id="picmerge-timer" class="picmerge-timer game-timer">40</div>
               <p class="picmerge-hint game-hint">ما الكلمة الناتجة عن دمج الصورتين؟</p>
             </div>
-            <div class="game-play-layout__main">
+            <div class="game-play-layout__main game-play-layout__main--picmerge">
               <div id="picmerge-image-wrap" class="picmerge-image-wrap ui-card">
                 <img id="picmerge-image" class="picmerge-image" src="" alt="تحدي الصور" hidden>
                 <p id="picmerge-image-fallback" class="picmerge-image-fallback" hidden>الصور قادمة قريباً</p>
               </div>
-            </div>
-            <div class="game-play-layout__side">
               <div class="picmerge-input-row">
                 <input id="picmerge-input" class="picmerge-input ui-input" type="text" placeholder="اكتب الكلمة…" maxlength="40">
                 <button id="picmerge-submit-btn" type="button" class="btn btn-primary">تخمين</button>
@@ -198,7 +197,11 @@
               <p id="picmerge-feedback" class="picmerge-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="picmerge-scores" class="picmerge-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="picmerge-scores" class="picmerge-scores game-scores"></div>
+            <p id="picmerge-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
@@ -208,7 +211,6 @@
             <div class="game-play-layout__meta">
               <h2 class="screen-title">أوجد الفروق</h2>
               <p id="spot-team-label" class="spot-meta game-meta"></p>
-              <p id="spot-progress" class="spot-meta game-meta"></p>
               <div id="spot-timer" class="spot-timer game-timer">60</div>
               <p id="spot-found-count" class="spot-meta game-meta">0 / 5</p>
               <p class="spot-hint game-hint">قارن الصورتين وانقر على الفروق في الصورة المعدّلة</p>
@@ -234,7 +236,11 @@
               <p id="spot-feedback" class="spot-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="spot-scores" class="spot-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="spot-scores" class="spot-scores game-scores"></div>
+            <p id="spot-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
@@ -244,7 +250,6 @@
             <div class="game-play-layout__meta">
               <h2 class="screen-title">الذاكرة البصرية</h2>
               <p id="memory-team-label" class="memory-meta game-meta"></p>
-              <p id="memory-progress" class="memory-meta game-meta"></p>
               <p id="memory-phase-hint" class="memory-hint game-hint"></p>
               <div id="memory-timer" class="memory-timer game-timer" hidden>30</div>
             </div>
@@ -256,7 +261,11 @@
               <p id="memory-feedback" class="memory-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="memory-scores" class="memory-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="memory-scores" class="memory-scores game-scores"></div>
+            <p id="memory-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
@@ -267,7 +276,6 @@
               <h2 class="screen-title">التحدي الإبداعي</h2>
               <p id="creative-creator-label" class="creative-meta game-meta"></p>
               <p id="creative-evaluator-label" class="creative-meta game-meta"></p>
-              <p id="creative-progress" class="creative-meta game-meta"></p>
               <p id="creative-challenge" class="creative-challenge"></p>
               <div id="creative-timer" class="creative-timer game-timer">60</div>
             </div>
@@ -290,7 +298,11 @@
               <p id="creative-feedback" class="creative-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="creative-scores" class="creative-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="creative-scores" class="creative-scores game-scores"></div>
+            <p id="creative-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 
@@ -301,7 +313,6 @@
               <h2 class="screen-title">كلمة السر</h2>
               <p id="password-describer-label" class="password-meta game-meta"></p>
               <p id="password-guesser-label" class="password-meta game-meta"></p>
-              <p id="password-progress" class="password-meta game-meta"></p>
               <p id="password-phase-hint" class="password-hint game-hint"></p>
               <div id="password-timer" class="password-timer game-timer">30</div>
             </div>
@@ -318,7 +329,11 @@
               <p id="password-feedback" class="password-feedback game-feedback" hidden></p>
             </div>
           </div>
-          <div id="password-scores" class="password-scores game-scores"></div>
+          <footer class="game-panel-footer">
+            <button type="button" class="btn btn-secondary game-back-btn">عودة للقائمة</button>
+            <div id="password-scores" class="password-scores game-scores"></div>
+            <p id="password-progress" class="game-panel-footer__progress game-meta"></p>
+          </footer>
         </div>
       </section>
 

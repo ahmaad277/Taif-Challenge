@@ -26,7 +26,6 @@ const gameState = {
     roundsPerTeam: 3,
     currentWords: [],
     correctWords: [],
-    selectedWordIndex: null,
     questionStartTime: 0,
     answered: false,
     timerId: null,
@@ -1378,49 +1377,168 @@ function startSentenceTimer() {
   }, 1000);
 }
 
+let sentenceDragState = null;
+
+function syncSentenceWordsFromDom() {
+  const wordsEl = document.getElementById('sentence-words');
+  if (!wordsEl) return;
+
+  const chips = wordsEl.querySelectorAll('.sentence-word');
+  gameState.sentence.currentWords = [...chips].map((chip) => chip.textContent.trim());
+  chips.forEach((chip, index) => {
+    chip.dataset.index = String(index);
+  });
+}
+
+function clearSentenceDragUi() {
+  const wordsEl = document.getElementById('sentence-words');
+  if (!wordsEl) return;
+
+  wordsEl.classList.remove('is-drag-active');
+  wordsEl.querySelectorAll('.sentence-word').forEach((chip) => {
+    chip.classList.remove('is-dragging', 'is-nudged');
+  });
+}
+
+function insertSentenceWordAtPointer(clientX) {
+  const wordsEl = document.getElementById('sentence-words');
+  const dragging = wordsEl?.querySelector('.sentence-word.is-dragging');
+  if (!dragging) return;
+
+  const others = [...wordsEl.querySelectorAll('.sentence-word:not(.is-dragging)')];
+  others.forEach((chip) => chip.classList.remove('is-nudged'));
+
+  if (!others.length) return;
+
+  const sorted = others
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { el, mid: rect.left + rect.width / 2 };
+    })
+    .sort((a, b) => a.mid - b.mid);
+
+  let insertBefore = null;
+  for (const item of sorted) {
+    if (clientX < item.mid) {
+      insertBefore = item.el;
+      item.el.classList.add('is-nudged');
+      break;
+    }
+  }
+
+  if (insertBefore) {
+    if (dragging !== insertBefore && dragging.nextElementSibling !== insertBefore) {
+      wordsEl.insertBefore(dragging, insertBefore);
+    }
+    return;
+  }
+
+  sorted[sorted.length - 1]?.el.classList.add('is-nudged');
+  if (dragging !== wordsEl.lastElementChild) {
+    wordsEl.appendChild(dragging);
+  }
+}
+
+function handleSentenceWordPointerDown(event) {
+  if (gameState.sentence.answered || event.button > 0) return;
+
+  event.preventDefault();
+
+  const chip = event.currentTarget;
+  chip.draggable = false;
+  sentenceDragState = {
+    pointerId: event.pointerId,
+    chip,
+  };
+
+  chip.classList.add('is-dragging');
+  chip.setPointerCapture(event.pointerId);
+  document.getElementById('sentence-words')?.classList.add('is-drag-active');
+
+  chip.addEventListener('pointermove', handleSentenceWordPointerMove);
+  chip.addEventListener('pointerup', handleSentenceWordPointerEnd);
+  chip.addEventListener('pointercancel', handleSentenceWordPointerEnd);
+}
+
+function handleSentenceWordPointerMove(event) {
+  if (!sentenceDragState || event.pointerId !== sentenceDragState.pointerId) return;
+  insertSentenceWordAtPointer(event.clientX);
+}
+
+function handleSentenceWordPointerEnd(event) {
+  if (!sentenceDragState || event.pointerId !== sentenceDragState.pointerId) return;
+
+  const { chip } = sentenceDragState;
+  chip.releasePointerCapture(event.pointerId);
+  chip.removeEventListener('pointermove', handleSentenceWordPointerMove);
+  chip.removeEventListener('pointerup', handleSentenceWordPointerEnd);
+  chip.removeEventListener('pointercancel', handleSentenceWordPointerEnd);
+
+  syncSentenceWordsFromDom();
+  chip.draggable = !gameState.sentence.answered;
+  clearSentenceDragUi();
+  sentenceDragState = null;
+}
+
+function handleSentenceWordDragStart(event) {
+  if (gameState.sentence.answered) {
+    event.preventDefault();
+    return;
+  }
+
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', event.currentTarget.dataset.index || '0');
+  requestAnimationFrame(() => event.currentTarget.classList.add('is-dragging'));
+  document.getElementById('sentence-words')?.classList.add('is-drag-active');
+}
+
+function handleSentenceWordsDragOver(event) {
+  event.preventDefault();
+  if (gameState.sentence.answered) return;
+  insertSentenceWordAtPointer(event.clientX);
+}
+
+function handleSentenceWordDragEnd() {
+  syncSentenceWordsFromDom();
+  clearSentenceDragUi();
+}
+
+function bindSentenceWordsContainer() {
+  const wordsEl = document.getElementById('sentence-words');
+  if (!wordsEl || wordsEl.dataset.bound === '1') return;
+
+  wordsEl.dataset.bound = '1';
+  wordsEl.addEventListener('dragover', handleSentenceWordsDragOver);
+  wordsEl.addEventListener('drop', (event) => {
+    event.preventDefault();
+    handleSentenceWordDragEnd();
+  });
+}
+
 function renderSentenceWords() {
   const wordsEl = document.getElementById('sentence-words');
   if (!wordsEl) return;
 
+  clearSentenceDragUi();
+  sentenceDragState = null;
   wordsEl.innerHTML = '';
+
   gameState.sentence.currentWords.forEach((word, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'sentence-word';
-    if (gameState.sentence.selectedWordIndex === index) {
-      button.classList.add('selected');
-    }
-    button.textContent = word;
-    button.addEventListener('click', () => handleSentenceWordClick(index));
-    wordsEl.appendChild(button);
+    const chip = document.createElement('span');
+    chip.className = 'sentence-word';
+    chip.textContent = word;
+    chip.dataset.index = String(index);
+    chip.draggable = !gameState.sentence.answered;
+    chip.setAttribute('role', 'listitem');
+
+    chip.addEventListener('pointerdown', handleSentenceWordPointerDown);
+    chip.addEventListener('dragstart', handleSentenceWordDragStart);
+    chip.addEventListener('dragend', handleSentenceWordDragEnd);
+
+    wordsEl.appendChild(chip);
   });
-}
 
-function handleSentenceWordClick(index) {
-  if (gameState.sentence.answered) return;
-
-  const { sentence } = gameState;
-
-  if (sentence.selectedWordIndex === null) {
-    sentence.selectedWordIndex = index;
-    renderSentenceWords();
-    return;
-  }
-
-  if (sentence.selectedWordIndex === index) {
-    sentence.selectedWordIndex = null;
-    renderSentenceWords();
-    return;
-  }
-
-  const swapped = [...sentence.currentWords];
-  [swapped[sentence.selectedWordIndex], swapped[index]] = [
-    swapped[index],
-    swapped[sentence.selectedWordIndex]
-  ];
-  sentence.currentWords = swapped;
-  sentence.selectedWordIndex = null;
-  renderSentenceWords();
+  bindSentenceWordsContainer();
 }
 
 function advanceSentenceTurn() {
@@ -1518,7 +1636,6 @@ function showNextSentenceRound() {
   sentence.currentTeamIndex = teamIndex;
   sentence.correctWords = [...puzzle.words];
   sentence.currentWords = shuffleArray([...puzzle.words]);
-  sentence.selectedWordIndex = null;
   sentence.answered = false;
   sentence.questionStartTime = Date.now();
 
@@ -3796,7 +3913,6 @@ function startSentenceGame() {
   gameState.sentence.poolPointer = 0;
   gameState.sentence.currentTeamIndex = 0;
   gameState.sentence.teamRoundCounts = {};
-  gameState.sentence.selectedWordIndex = null;
   gameState.sentence.answered = false;
 
   gameState.teams.forEach((team) => {
@@ -4446,19 +4562,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  document.querySelectorAll('.game-screen').forEach((screen) => {
-    const panel = screen.querySelector('.content-panel--game');
-    if (!panel) return;
-    const scoresEl = panel.querySelector('.game-scores');
-    const backBtn = document.createElement('button');
-    backBtn.type = 'button';
-    backBtn.className = 'btn btn-secondary game-back-btn';
-    backBtn.textContent = 'عودة للقائمة';
-    if (scoresEl) {
-      panel.insertBefore(backBtn, scoresEl);
-    } else {
-      panel.append(backBtn);
-    }
+  document.querySelectorAll('.game-screen .game-back-btn').forEach((backBtn) => {
     backBtn.addEventListener('click', () => {
       stopAllGameTimers();
       returnToGameSelect();
