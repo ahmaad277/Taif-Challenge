@@ -41,6 +41,7 @@
           width="320"
           height="460"
         />
+        <button id="taif-start-btn" type="button" class="btn btn-primary btn-lg taif-intro-start-btn" hidden>بدأ !</button>
       </div>
     </aside>
 
@@ -67,12 +68,7 @@
         </div>
       </section>
 
-      <section id="taif-screen" class="screen taif-intro-screen">
-        <div class="content-panel content-panel--center">
-          <p class="taif-intro-hint">استمعوا لطيف في اللوحة…</p>
-          <button id="taif-start-btn" type="button" class="btn btn-primary btn-lg">بدأ !</button>
-        </div>
-      </section>
+      <section id="taif-screen" class="screen taif-intro-screen" aria-label="مقدمة طيف"></section>
 
       <section id="game-select-screen" class="screen game-select-screen">
         <div class="content-panel content-panel--wide">
@@ -91,7 +87,7 @@
       </section>
 
       <section id="session-end-screen" class="screen session-end-screen">
-        <div id="session-end-confetti" class="session-end-confetti" aria-hidden="true"></div>
+        <div id="session-end-confetti" class="celebration-confetti session-end-confetti" aria-hidden="true"></div>
         <div class="content-panel content-panel--center">
           <h2 class="screen-title">النتائج النهائية</h2>
           <p id="session-end-winner" class="session-end-winner"></p>
@@ -134,10 +130,10 @@
       <section id="trivia-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
           <div class="game-play-layout game-play-layout--stacked">
-            <div class="game-play-layout__meta game-play-layout__meta--trivia">
+            <div class="game-play-layout__meta game-play-layout__meta--centered">
               <h2 id="trivia-screen-title" class="screen-title">الأسئلة العامة</h2>
               <p id="trivia-team-label" class="trivia-meta game-meta"></p>
-              <p id="trivia-question" class="trivia-question"></p>
+              <p id="trivia-question" class="trivia-question game-play-prompt"></p>
               <div id="trivia-timer" class="trivia-timer game-timer">15</div>
             </div>
             <div class="game-play-layout__main game-play-layout__main--centered">
@@ -156,13 +152,13 @@
       <section id="sentence-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
           <div class="game-play-layout game-play-layout--stacked">
-            <div class="game-play-layout__meta">
+            <div class="game-play-layout__meta game-play-layout__meta--centered">
               <h2 class="screen-title">رتب الجملة</h2>
               <p id="sentence-team-label" class="sentence-meta game-meta"></p>
+              <p class="sentence-hint game-hint game-play-prompt">اسحب الكلمات لترتيب الجملة، ثم اضغط تحقق</p>
               <div id="sentence-timer" class="sentence-timer game-timer">30</div>
-              <p class="sentence-hint game-hint">اسحب الكلمات لترتيب الجملة، ثم اضغط تحقق</p>
             </div>
-            <div class="game-play-layout__main sentence-play-area">
+            <div class="game-play-layout__main game-play-layout__main--centered sentence-play-area">
               <div id="sentence-words" class="sentence-words" role="list" aria-label="كلمات الجملة"></div>
               <button id="sentence-check-btn" type="button" class="btn btn-primary">تحقق</button>
               <p id="sentence-feedback" class="sentence-feedback game-feedback" hidden></p>
@@ -183,7 +179,7 @@
               <h2 class="screen-title">تحدي الصور</h2>
               <p id="picmerge-team-label" class="picmerge-meta game-meta"></p>
               <div id="picmerge-timer" class="picmerge-timer game-timer">40</div>
-              <p class="picmerge-hint game-hint">ما الكلمة الناتجة عن دمج الصورتين؟</p>
+              <p class="picmerge-hint game-hint game-play-prompt">ما الكلمة الناتجة عن دمج الصورتين؟</p>
             </div>
             <div class="game-play-layout__main game-play-layout__main--picmerge">
               <div id="picmerge-image-wrap" class="picmerge-image-wrap ui-card">
@@ -213,7 +209,7 @@
               <p id="spot-team-label" class="spot-meta game-meta"></p>
               <div id="spot-timer" class="spot-timer game-timer">60</div>
               <p id="spot-found-count" class="spot-meta game-meta">0 / 5</p>
-              <p class="spot-hint game-hint">قارن الصورتين وانقر على الفروق في الصورة المعدّلة</p>
+              <p class="spot-hint game-hint game-play-prompt">قارن الصورتين وانقر على الفروق في الصورة المعدّلة</p>
             </div>
             <div class="game-play-layout__main game-play-layout__main--wide">
               <div class="spot-images-row">
@@ -246,18 +242,16 @@
 
       <section id="memory-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
-          <div class="game-play-layout">
-            <div class="game-play-layout__meta">
+          <div class="game-play-layout game-play-layout--stacked">
+            <div class="game-play-layout__meta game-play-layout__meta--centered">
               <h2 class="screen-title">الذاكرة البصرية</h2>
               <p id="memory-team-label" class="memory-meta game-meta"></p>
-              <p id="memory-phase-hint" class="memory-hint game-hint"></p>
+              <p id="memory-phase-hint" class="memory-hint game-hint game-play-prompt"></p>
               <div id="memory-timer" class="memory-timer game-timer" hidden>30</div>
             </div>
-            <div class="game-play-layout__main">
+            <div class="game-play-layout__main game-play-layout__main--centered memory-play-area">
               <div id="memory-grid" class="memory-grid"></div>
               <button id="memory-check-btn" type="button" class="btn btn-primary" hidden>تحقق</button>
-            </div>
-            <div class="game-play-layout__side">
               <p id="memory-feedback" class="memory-feedback game-feedback" hidden></p>
             </div>
           </div>
@@ -276,7 +270,7 @@
               <h2 class="screen-title">التحدي الإبداعي</h2>
               <p id="creative-creator-label" class="creative-meta game-meta"></p>
               <p id="creative-evaluator-label" class="creative-meta game-meta"></p>
-              <p id="creative-challenge" class="creative-challenge"></p>
+              <p id="creative-challenge" class="creative-challenge game-play-prompt"></p>
               <div id="creative-timer" class="creative-timer game-timer">60</div>
             </div>
             <div class="game-play-layout__main">
@@ -289,7 +283,7 @@
                 <button id="creative-done-btn" type="button" class="btn btn-primary">انتهيت</button>
               </div>
               <div id="creative-rate-section" class="creative-rate-section" hidden>
-                <p class="creative-hint game-hint">قيّم إجابة الفريق من 1 إلى 10</p>
+                <p class="creative-hint game-hint game-play-prompt">قيّم إجابة الفريق من 1 إلى 10</p>
                 <div id="creative-answer-preview" class="creative-answer-preview ui-card"></div>
                 <div id="creative-rating-buttons" class="creative-rating-buttons"></div>
               </div>
@@ -313,7 +307,7 @@
               <h2 class="screen-title">كلمة السر</h2>
               <p id="password-describer-label" class="password-meta game-meta"></p>
               <p id="password-guesser-label" class="password-meta game-meta"></p>
-              <p id="password-phase-hint" class="password-hint game-hint"></p>
+              <p id="password-phase-hint" class="password-hint game-hint game-play-prompt"></p>
               <div id="password-timer" class="password-timer game-timer">30</div>
             </div>
             <div class="game-play-layout__main">
@@ -338,6 +332,7 @@
       </section>
 
       <section id="partial-results-screen" class="screen partial-results-screen">
+        <div id="partial-results-confetti" class="celebration-confetti" aria-hidden="true"></div>
         <div class="content-panel content-panel--center">
           <h2 class="screen-title">نتائج جزئية</h2>
           <p id="partial-results-subtitle" class="partial-results-subtitle"></p>

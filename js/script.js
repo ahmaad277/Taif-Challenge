@@ -123,6 +123,81 @@ const gameState = {
   }
 };
 
+const TEAM_COLORS = [
+  '#5B9FED', /* 1 — أزرق */
+  '#FF5757', /* 2 — أحمر */
+  '#FFD54A', /* 3 — أصفر */
+  '#4ADE80', /* 4 — أخضر */
+  '#000000', /* 5 — أسود */
+  '#C084FC', /* 6 */
+  '#FF9F43', /* 7 */
+  '#22D3EE'  /* 8 */
+];
+
+function getTeamColorByIndex(index) {
+  if (index < 0) return '';
+  return TEAM_COLORS[index % TEAM_COLORS.length];
+}
+
+function getTeamColorByName(teamName) {
+  return getTeamColorByIndex(gameState.teams.indexOf(teamName));
+}
+
+function applyTeamLabelColor(element, teamName) {
+  if (!element) return;
+
+  const index = gameState.teams.indexOf(teamName);
+  element.classList.add('game-team-label');
+  element.classList.toggle('team-label--dark', index === 4);
+  element.dataset.teamIndex = index >= 0 ? String(index) : '';
+
+  if (index < 0) {
+    element.style.removeProperty('color');
+    return;
+  }
+
+  if (index === 4) {
+    element.style.removeProperty('color');
+    return;
+  }
+
+  element.style.color = getTeamColorByIndex(index);
+}
+
+function setColoredTeamLabel(element, prefix, teamName) {
+  if (!element) return;
+  element.textContent = `${prefix}${teamName}`;
+  applyTeamLabelColor(element, teamName);
+}
+
+function buildTeamScoreItemHtml(team, score, itemClass) {
+  const index = gameState.teams.indexOf(team);
+  const darkClass = index === 4 ? ' team-score-item--dark' : '';
+  const color = getTeamColorByIndex(index);
+  const colorAttr = index >= 0 && index !== 4 ? ` style="color:${color}"` : '';
+
+  return `<span class="${itemClass} game-score-item${darkClass}"${colorAttr}><strong>${team}</strong>: ${score}</span>`;
+}
+
+function syncGameFooterTeamCount(scoresEl) {
+  if (!scoresEl) return;
+
+  const count = String(gameState.teams.length);
+  scoresEl.dataset.teamCount = count;
+  scoresEl.closest('.game-panel-footer')?.setAttribute('data-team-count', count);
+}
+
+function updateGameScoresDisplay(scoresId, itemClass) {
+  const scoresEl = document.getElementById(scoresId);
+  if (!scoresEl) return;
+
+  scoresEl.innerHTML = gameState.teams
+    .map((team) => buildTeamScoreItemHtml(team, gameState.scores[team] || 0, itemClass))
+    .join('');
+
+  syncGameFooterTeamCount(scoresEl);
+}
+
 const SENTENCE_PUZZLES = [
   { words: ['الطفل', 'يلعب', 'في', 'الحديقة', 'الجميلة'] },
   { words: ['الشمس', 'تشرق', 'من', 'الشرق', 'يومياً'] },
@@ -174,7 +249,7 @@ function showScreen(screenId) {
       clearTypewriter();
     }
   } else if (startBtn) {
-    startBtn.hidden = false;
+    startBtn.hidden = true;
   }
 
   document.querySelectorAll('.screen').forEach((screen) => {
@@ -473,9 +548,14 @@ function renderScoreBoard(containerEl, options = {}) {
   containerEl.innerHTML = sorted
     .map((team, index) => {
       const score = gameState.scores[team] || 0;
+      const teamIndex = gameState.teams.indexOf(team);
       const isWinner = highlightWinner && score === topScore && topScore > 0;
       const winnerClass = isWinner ? ' score-board-item--winner' : '';
-      return `<span class="score-board-item${winnerClass}"><strong>${index + 1}. ${team}</strong>: ${score} نقطة</span>`;
+      const darkClass = teamIndex === 4 ? ' team-score-item--dark' : '';
+      const color = getTeamColorByIndex(teamIndex);
+      const colorAttr = teamIndex >= 0 && teamIndex !== 4 ? ` style="color:${color}"` : '';
+
+      return `<span class="score-board-item game-score-item${winnerClass}${darkClass}"${colorAttr}><strong>${index + 1}. ${team}</strong>: ${score}</span>`;
     })
     .join('');
 }
@@ -617,10 +697,14 @@ function showPartialResultsScreen(completedGameId, onContinue) {
     continueBtn.hidden = session.mode === 'single';
   }
 
+  clearCelebrationEffects();
   showScreen('partial-results-screen');
+  startCelebrationEffects('partial-results-confetti');
+  playVictorySound();
 }
 
 function handlePartialResultsContinue() {
+  clearCelebrationEffects();
   const { pendingContinue } = gameState.session;
   gameState.session.pendingContinue = null;
   if (pendingContinue) {
@@ -1051,15 +1135,7 @@ function getNextQuestion() {
 }
 
 function updateTriviaScoresDisplay() {
-  const scoresEl = document.getElementById('trivia-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="trivia-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('trivia-scores', 'trivia-score-item');
 }
 
 function hideTriviaFeedback() {
@@ -1201,7 +1277,7 @@ function renderTriviaQuestion(question) {
   const answeredCount = gameState.trivia.teamQuestionCounts[teamName];
 
   if (teamLabelEl) {
-    teamLabelEl.textContent = `دور فريق: ${teamName}`;
+    setColoredTeamLabel(teamLabelEl, 'دور فريق: ', teamName);
   }
 
   if (progressEl) {
@@ -1313,15 +1389,7 @@ function getNextSentencePuzzle() {
 }
 
 function updateSentenceScoresDisplay() {
-  const scoresEl = document.getElementById('sentence-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="sentence-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('sentence-scores', 'sentence-score-item');
 }
 
 function hideSentenceFeedback() {
@@ -1645,7 +1713,7 @@ function showNextSentenceRound() {
   const roundCount = sentence.teamRoundCounts[teamName];
 
   if (teamLabelEl) {
-    teamLabelEl.textContent = `دور فريق: ${teamName}`;
+    setColoredTeamLabel(teamLabelEl, 'دور فريق: ', teamName);
   }
 
   if (progressEl) {
@@ -2092,15 +2160,7 @@ function getNextPicmergePuzzle() {
 }
 
 function updatePicmergeScoresDisplay() {
-  const scoresEl = document.getElementById('picmerge-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="picmerge-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('picmerge-scores', 'picmerge-score-item');
 }
 
 function hidePicmergeFeedback() {
@@ -2286,7 +2346,7 @@ function showNextPicmergeRound() {
   const roundCount = picmerge.teamRoundCounts[teamName];
 
   if (teamLabelEl) {
-    teamLabelEl.textContent = `دور فريق: ${teamName}`;
+    setColoredTeamLabel(teamLabelEl, 'دور فريق: ', teamName);
   }
 
   if (progressEl) {
@@ -2379,15 +2439,7 @@ function getNextSpotPuzzle() {
 }
 
 function updateSpotScoresDisplay() {
-  const scoresEl = document.getElementById('spot-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="spot-score-item"><strong>${team}</strong>: ${score} \u0646\u0642\u0637\u0629</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('spot-scores', 'spot-score-item');
 }
 
 function hideSpotFeedback() {
@@ -2620,7 +2672,7 @@ function showNextSpotRound() {
   const roundCount = spot.teamRoundCounts[teamName];
 
   if (teamLabelEl) {
-    teamLabelEl.textContent = `\u062f\u0648\u0631 \u0641\u0631\u064a\u0642: ${teamName}`;
+    setColoredTeamLabel(teamLabelEl, 'دور فريق: ', teamName);
   }
 
   if (progressEl) {
@@ -2704,15 +2756,7 @@ function getNextMemoryRoundOrder() {
 }
 
 function updateMemoryScoresDisplay() {
-  const scoresEl = document.getElementById('memory-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="memory-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('memory-scores', 'memory-score-item');
 }
 
 function hideMemoryFeedback() {
@@ -2857,14 +2901,8 @@ function startMemoryMemorizePhase() {
   setMemoryPhaseUI('memorize');
   hideMemoryFeedback();
   renderMemoryGrid();
-
-  requestAnimationFrame(() => {
-    const gridEl = document.getElementById('memory-grid');
-    if (gridEl) {
-      taifEnterGridMode(gridEl, MEMORY_GRID_SIZE);
-      startTaifGridWalk(gridEl, MEMORY_GRID_SIZE, 1400);
-    }
-  });
+  taifExitGridMode();
+  setTaifMotion('idle');
 
   if (memory.memorizeTimerId) {
     clearTimeout(memory.memorizeTimerId);
@@ -3033,7 +3071,7 @@ function showNextMemoryRound() {
   const roundCount = memory.teamRoundCounts[teamName];
 
   if (teamLabelEl) {
-    teamLabelEl.textContent = `دور فريق: ${teamName}`;
+    setColoredTeamLabel(teamLabelEl, 'دور فريق: ', teamName);
   }
 
   if (progressEl) {
@@ -3121,15 +3159,7 @@ function getNextCreativeChallenge() {
 }
 
 function updateCreativeScoresDisplay() {
-  const scoresEl = document.getElementById('creative-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="creative-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('creative-scores', 'creative-score-item');
 }
 
 function hideCreativeFeedback() {
@@ -3453,10 +3483,10 @@ function showNextCreativeRound() {
   const roundCount = creative.teamRoundCounts[creatorName];
 
   if (creatorLabelEl) {
-    creatorLabelEl.textContent = `فريق منشئ: ${creatorName}`;
+    setColoredTeamLabel(creatorLabelEl, 'فريق منشئ: ', creatorName);
   }
   if (evaluatorLabelEl) {
-    evaluatorLabelEl.textContent = `فريق المقيّم: ${evaluatorName}`;
+    setColoredTeamLabel(evaluatorLabelEl, 'فريق المقيّم: ', evaluatorName);
   }
   if (progressEl) {
     progressEl.textContent = `التحدي ${roundCount + 1} من ${creative.roundsPerTeam}`;
@@ -3542,15 +3572,7 @@ function normalizePasswordText(text) {
 }
 
 function updatePasswordScoresDisplay() {
-  const scoresEl = document.getElementById('password-scores');
-  if (!scoresEl) return;
-
-  scoresEl.innerHTML = gameState.teams
-    .map((team) => {
-      const score = gameState.scores[team] || 0;
-      return `<span class="password-score-item"><strong>${team}</strong>: ${score} نقطة</span>`;
-    })
-    .join('');
+  updateGameScoresDisplay('password-scores', 'password-score-item');
 }
 
 function hidePasswordFeedback() {
@@ -3771,10 +3793,10 @@ function showNextPasswordRound() {
   const guesserName = getGuesserTeamName();
 
   if (describerLabelEl) {
-    describerLabelEl.textContent = `فريق الوصف: ${describerName}`;
+    setColoredTeamLabel(describerLabelEl, 'فريق الوصف: ', describerName);
   }
   if (guesserLabelEl) {
-    guesserLabelEl.textContent = `فريق التخمين: ${guesserName}`;
+    setColoredTeamLabel(guesserLabelEl, 'فريق التخمين: ', guesserName);
   }
   if (progressEl) {
     progressEl.textContent = `الجولة ${password.roundNumber} — ${describerName} ضد ${guesserName}`;
@@ -3977,6 +3999,8 @@ function renderTeamInputs(count) {
     const label = document.createElement('label');
     label.setAttribute('for', `team-input-${i}`);
     label.textContent = `الفريق ${i}`;
+    label.style.color = getTeamColorByIndex(i - 1);
+    label.style.fontWeight = '700';
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -3984,6 +4008,8 @@ function renderTeamInputs(count) {
     input.className = 'team-input';
     input.placeholder = `اسم الفريق ${i}`;
     input.maxLength = 30;
+    input.dataset.teamIndex = String(i - 1);
+    input.style.setProperty('--team-accent', getTeamColorByIndex(i - 1));
 
     row.appendChild(label);
     row.appendChild(input);
@@ -4215,7 +4241,29 @@ function playWelcomeSound() {
   }
 }
 
-const CONFETTI_COLORS = ['#e94560', '#ffd32a', '#2ed573', '#3498db'];
+const CONFETTI_COLORS = ['#e94560', '#ffd32a', '#2ed573', '#3498db', '#C084FC', '#FF9F43'];
+
+function populateConfetti(confettiEl, pieceCount = 40) {
+  if (!confettiEl) return;
+
+  confettiEl.innerHTML = '';
+  const palette = [...TEAM_COLORS, ...CONFETTI_COLORS];
+
+  for (let i = 0; i < pieceCount; i += 1) {
+    const piece = document.createElement('span');
+    const variant = i % 7;
+    piece.className = variant === 0
+      ? 'confetti-piece confetti-piece--wide'
+      : variant === 1
+        ? 'confetti-piece confetti-piece--sparkle'
+        : 'confetti-piece';
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.backgroundColor = palette[i % palette.length];
+    piece.style.animationDelay = `${Math.random() * 1.4}s`;
+    piece.style.animationDuration = `${2.2 + Math.random() * 2}s`;
+    confettiEl.appendChild(piece);
+  }
+}
 
 function playVictorySound() {
   try {
@@ -4243,38 +4291,51 @@ function playVictorySound() {
       oscillator.start(noteStart);
       oscillator.stop(noteStart + 0.4);
     });
+
+    const chordStart = startTime + 0.72;
+    [523.25, 659.25, 783.99].forEach((freq) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, chordStart);
+
+      gain.gain.setValueAtTime(0.0001, chordStart);
+      gain.gain.exponentialRampToValueAtTime(0.14, chordStart + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + 0.9);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.start(chordStart);
+      oscillator.stop(chordStart + 0.95);
+    });
   } catch {
     // Audio may be blocked; results screen continues without sound.
   }
 }
 
-function startCelebrationEffects() {
-  document.body.classList.add('session-celebrating');
+function startCelebrationEffects(confettiId = 'session-end-confetti') {
+  document.body.classList.add('results-celebrating');
 
-  const confettiEl = document.getElementById('session-end-confetti');
-  if (!confettiEl) return;
-
-  confettiEl.innerHTML = '';
-  const pieceCount = 24;
-
-  for (let i = 0; i < pieceCount; i += 1) {
-    const piece = document.createElement('span');
-    piece.className = 'confetti-piece';
-    piece.style.left = `${Math.random() * 100}%`;
-    piece.style.backgroundColor = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-    piece.style.animationDelay = `${Math.random() * 1.2}s`;
-    piece.style.animationDuration = `${2.5 + Math.random() * 1.5}s`;
-    confettiEl.appendChild(piece);
+  const confettiEl = document.getElementById(confettiId);
+  if (confettiEl && confettiEl.parentElement !== document.body) {
+    document.body.appendChild(confettiEl);
   }
+
+  const pieceCount = confettiId === 'partial-results-confetti' ? 52 : 40;
+  populateConfetti(confettiEl, pieceCount);
 }
 
 function clearCelebrationEffects() {
-  document.body.classList.remove('session-celebrating');
+  document.body.classList.remove('results-celebrating', 'session-celebrating');
 
-  const confettiEl = document.getElementById('session-end-confetti');
-  if (confettiEl) {
-    confettiEl.innerHTML = '';
-  }
+  ['session-end-confetti', 'partial-results-confetti'].forEach((id) => {
+    const confettiEl = document.getElementById(id);
+    if (confettiEl) {
+      confettiEl.innerHTML = '';
+    }
+  });
 }
 
 function hideTaifCursor() {
@@ -4349,6 +4410,10 @@ function startTaifIntro() {
 
   const startBtn = document.getElementById('taif-start-btn');
 
+  if (startBtn) {
+    startBtn.hidden = true;
+  }
+
   const { text: textEl, heroText } = getTaifStageElements();
   if (textEl) textEl.textContent = '';
   if (heroText) heroText.textContent = '';
@@ -4398,6 +4463,9 @@ function validateAndSaveTeams() {
 
   hideTeamsError();
   gameState.teams = names;
+  document.querySelectorAll('.game-panel-footer .game-scores').forEach((scoresEl) => {
+    syncGameFooterTeamCount(scoresEl);
+  });
   showScreen('taif-screen');
   startTaifIntro();
 }
@@ -4527,7 +4595,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const partialResultsBackBtn = document.getElementById('partial-results-back-btn');
   if (partialResultsBackBtn) {
-    partialResultsBackBtn.addEventListener('click', returnToGameSelect);
+    partialResultsBackBtn.addEventListener('click', () => {
+      clearCelebrationEffects();
+      returnToGameSelect();
+    });
   }
 
   const sessionPlayAgainBtn = document.getElementById('session-play-again-btn');
