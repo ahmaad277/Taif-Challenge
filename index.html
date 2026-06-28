@@ -51,6 +51,9 @@
           <h1 class="game-title">تحديات طيف</h1>
           <p class="game-subtitle">لعبة جماعية تفاعلية — طيف مضيفتكم في الاستوديو</p>
           <button id="start-btn" type="button" class="btn btn-primary btn-lg">ابدأ اللعبة</button>
+          <button id="open-content-editor-btn" type="button" class="btn btn-secondary welcome-secondary-btn">
+            <span aria-hidden="true">＋</span> إضافة محتوى
+          </button>
         </div>
       </section>
 
@@ -75,6 +78,12 @@
           <button id="play-all-random-btn" type="button" class="btn btn-primary">العب جميع الألعاب (ترتيب عشوائي)</button>
           <div id="game-select-grid" class="game-select-grid"></div>
           <button id="game-select-home-btn" type="button" class="btn btn-secondary">العودة إلى شاشة البداية</button>
+        </div>
+      </section>
+
+      <section id="content-editor-screen" class="screen content-editor-screen">
+        <div class="content-panel content-panel--wide ce-panel">
+          <div id="ce-root"></div>
         </div>
       </section>
 
@@ -172,6 +181,15 @@
         </div>
       </section>
 
+      <!-- شاشة اختيار نمط تحدي الصور -->
+      <section id="picmerge-mode-screen" class="screen">
+        <div class="content-panel content-panel--wide">
+          <h2 class="screen-title">تحدي الصور — اختر النمط</h2>
+          <div id="picmerge-mode-grid" class="trivia-mode-grid"></div>
+          <button id="picmerge-mode-back-btn" type="button" class="btn btn-secondary">عودة</button>
+        </div>
+      </section>
+
       <section id="picmerge-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
           <div class="game-play-layout game-play-layout--stacked">
@@ -186,10 +204,11 @@
                 <img id="picmerge-image" class="picmerge-image" src="" alt="تحدي الصور" hidden>
                 <p id="picmerge-image-fallback" class="picmerge-image-fallback" hidden>الصور قادمة قريباً</p>
               </div>
-              <div class="picmerge-input-row">
+              <div id="picmerge-input-row" class="picmerge-input-row">
                 <input id="picmerge-input" class="picmerge-input ui-input" type="text" placeholder="اكتب الكلمة…" maxlength="40">
                 <button id="picmerge-submit-btn" type="button" class="btn btn-primary">تخمين</button>
               </div>
+              <div id="picmerge-battle-inputs" class="picmerge-battle-inputs" hidden></div>
               <p id="picmerge-feedback" class="picmerge-feedback game-feedback" hidden></p>
             </div>
           </div>
@@ -240,18 +259,33 @@
         </div>
       </section>
 
+      <!-- شاشة اختيار نمط الذاكرة البصرية -->
+      <section id="memory-mode-screen" class="screen">
+        <div class="content-panel content-panel--wide">
+          <h2 class="screen-title">الذاكرة البصرية — اختر النمط</h2>
+          <div id="memory-mode-grid" class="trivia-mode-grid"></div>
+          <button id="memory-mode-back-btn" type="button" class="btn btn-secondary">عودة</button>
+        </div>
+      </section>
+
       <section id="memory-screen" class="screen game-screen">
         <div class="content-panel content-panel--game">
           <div class="game-play-layout game-play-layout--stacked">
             <div class="game-play-layout__meta game-play-layout__meta--centered">
               <h2 class="screen-title">الذاكرة البصرية</h2>
               <p id="memory-team-label" class="memory-meta game-meta"></p>
-              <p id="memory-phase-hint" class="memory-hint game-hint game-play-prompt"></p>
-              <div id="memory-timer" class="memory-timer game-timer" hidden>30</div>
+              <div class="memory-timer-wrap">
+                <div id="memory-timer" class="memory-timer game-timer" hidden>30</div>
+                <span id="memory-penalty-flash" class="memory-penalty-flash" hidden aria-live="polite">−2</span>
+              </div>
             </div>
             <div class="game-play-layout__main game-play-layout__main--centered memory-play-area">
-              <div id="memory-grid" class="memory-grid"></div>
-              <button id="memory-check-btn" type="button" class="btn btn-primary" hidden>تحقق</button>
+              <p id="memory-phase-hint" class="memory-hint game-hint game-play-prompt"></p>
+              <div class="memory-board-center">
+                <div class="memory-board-wrap ui-card">
+                  <div id="memory-grid" class="memory-grid" data-size="3"></div>
+                </div>
+              </div>
               <p id="memory-feedback" class="memory-feedback game-feedback" hidden></p>
             </div>
           </div>
@@ -269,23 +303,60 @@
             <div class="game-play-layout__meta">
               <h2 class="screen-title">التحدي الإبداعي</h2>
               <p id="creative-creator-label" class="creative-meta game-meta"></p>
-              <p id="creative-evaluator-label" class="creative-meta game-meta"></p>
               <p id="creative-challenge" class="creative-challenge game-play-prompt"></p>
               <div id="creative-timer" class="creative-timer game-timer">60</div>
             </div>
             <div class="game-play-layout__main">
               <div id="creative-create-section">
-                <textarea id="creative-answer-input" class="creative-answer-input ui-input" placeholder="اكتب إجابتك هنا..." maxlength="500"></textarea>
-                <div id="creative-draw-wrap" class="creative-draw-wrap" hidden>
+                <div id="creative-draw-wrap" class="creative-draw-wrap">
                   <canvas id="creative-draw-canvas"></canvas>
-                  <button id="creative-clear-btn" type="button" class="btn btn-secondary">مسح الرسم</button>
+                  <div id="creative-palette" class="creative-palette" role="group" aria-label="ألوان التلوين"></div>
+                  <div id="creative-toolbar" class="creative-toolbar" role="toolbar" aria-label="أدوات الرسم">
+                    <div class="creative-toolbar-group">
+                      <button id="creative-tool-brush" type="button" class="creative-tool-btn active" title="فرشاة"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M13.6 2.4a2 2 0 012.8 2.8L7.7 13.9l-3.8 1 1-3.8z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+                      <button id="creative-tool-eraser" type="button" class="creative-tool-btn" title="ممسحة"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M15.5 5L8 12.5 5 16h7l5.5-5.5z" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="16" x2="17" y2="16" stroke="currentColor" stroke-width="1.5"/></svg></button>
+                      <button id="creative-tool-fill" type="button" class="creative-tool-btn" title="تعبئة"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M3.5 10.5l6-6 5 5-6 6z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M16 13c1 1.5 0 3-1 3s-2-1.5-1-3l1-1.5z" fill="currentColor"/></svg></button>
+                    </div>
+                    <span class="creative-toolbar-sep"></span>
+                    <div class="creative-toolbar-group creative-brush-sizes" role="radiogroup" aria-label="حجم الفرشاة">
+                      <button type="button" class="creative-size-btn" data-size="3" title="رفيع"><span class="creative-size-dot" style="width:5px;height:5px"></span></button>
+                      <button type="button" class="creative-size-btn active" data-size="6" title="متوسط"><span class="creative-size-dot" style="width:9px;height:9px"></span></button>
+                      <button type="button" class="creative-size-btn" data-size="12" title="سميك"><span class="creative-size-dot" style="width:14px;height:14px"></span></button>
+                      <button type="button" class="creative-size-btn" data-size="20" title="عريض"><span class="creative-size-dot" style="width:20px;height:20px"></span></button>
+                    </div>
+                    <span class="creative-toolbar-sep"></span>
+                    <div class="creative-toolbar-group">
+                      <button id="creative-undo-btn" type="button" class="creative-tool-btn" title="تراجع"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M5 8h7a4 4 0 010 8H9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 5L5 8l3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                      <button id="creative-redo-btn" type="button" class="creative-tool-btn" title="تقدم"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M15 8H8a4 4 0 000 8h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="creative-draw-tools">
+                    <button id="creative-clear-btn" type="button" class="btn btn-secondary">مسح الرسم</button>
+                    <button id="creative-done-btn" type="button" class="btn btn-primary">انتهيت</button>
+                  </div>
                 </div>
-                <button id="creative-done-btn" type="button" class="btn btn-primary">انتهيت</button>
               </div>
               <div id="creative-rate-section" class="creative-rate-section" hidden>
-                <p class="creative-hint game-hint game-play-prompt">قيّم إجابة الفريق من 1 إلى 10</p>
-                <div id="creative-answer-preview" class="creative-answer-preview ui-card"></div>
-                <div id="creative-rating-buttons" class="creative-rating-buttons"></div>
+                <div class="creative-compare">
+                  <div class="creative-compare-col">
+                    <span class="creative-compare-label">رسمتكم</span>
+                    <div id="creative-answer-preview" class="creative-answer-preview ui-card"></div>
+                  </div>
+                  <div class="creative-compare-col">
+                    <span class="creative-compare-label">نسخة طيف الواقعية</span>
+                    <div id="creative-realistic-box" class="creative-realistic-box ui-card"></div>
+                  </div>
+                </div>
+                <div id="creative-eval-result" class="creative-eval-result" aria-live="polite"></div>
+                <button id="creative-next-btn" type="button" class="btn btn-primary" hidden>التالي ⏭</button>
+                <div id="creative-key-setup" class="creative-key-setup" hidden>
+                  <p class="creative-key-note">أدخل مفتاح OpenRouter API لتفعيل تقييم طيف الذكي للرسمة. يُحفظ في متصفّحك فقط.</p>
+                  <input id="creative-key-input" type="password" class="creative-key-input ui-input" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false" />
+                  <div class="creative-key-actions">
+                    <button id="creative-key-save" type="button" class="btn btn-primary">حفظ وتقييم</button>
+                    <button id="creative-key-skip" type="button" class="btn btn-secondary">تقييم تقريبي بدون مفتاح</button>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="game-play-layout__side">
@@ -313,9 +384,10 @@
             <div class="game-play-layout__main">
               <div id="password-read-section">
                 <p id="password-secret-word" class="password-secret-word ui-card"></p>
+                <p id="password-secret-category" class="password-secret-category"></p>
               </div>
               <div id="password-guess-section" class="password-guess-section" hidden>
-                <input id="password-guess-input" class="password-guess-input ui-input" type="text" placeholder="اكتب التخمين..." maxlength="40">
+                <input id="password-guess-input" class="password-guess-input ui-input" type="text" placeholder="اكتب العبارة..." maxlength="80">
                 <button id="password-submit-btn" type="button" class="btn btn-primary">تخمين</button>
               </div>
             </div>
@@ -379,6 +451,7 @@
   <script src="js/picmerge-data.js" defer></script>
   <script src="js/spot-scenes.js" defer></script>
   <script src="js/script.js" defer></script>
+  <script src="js/content-editor.js" defer></script>
   <script src="js/taif-actor.js" defer></script>
 </body>
 </html>

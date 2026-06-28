@@ -518,7 +518,7 @@ function getGameScreenTaifText(screenId) {
   return pickTaifLine(null, { gameId }) || 'يلا نلعب!';
 }
 
-function syncTaifTimer(seconds, { warning = false, gameKey = null, active = true } = {}) {
+function syncTaifTimer(seconds, { warning = false, gameKey = null, active = true, memorize = false } = {}) {
   const { timer, stage } = getTaifStageElements();
   if (!timer || !stage) return;
 
@@ -532,6 +532,7 @@ function syncTaifTimer(seconds, { warning = false, gameKey = null, active = true
 
   if (!showTimer) {
     timer.hidden = true;
+    timer.classList.remove('timer-warning', 'timer-memorize');
     stage.classList.remove('taif-stage--timer-active');
     taifLastTimerSecond = null;
     if (!taifTypewriterActive && taifCurrentMotion === 'count') {
@@ -542,23 +543,25 @@ function syncTaifTimer(seconds, { warning = false, gameKey = null, active = true
 
   timer.hidden = false;
   timer.textContent = String(seconds);
-  timer.classList.toggle('timer-warning', warning);
+  timer.classList.toggle('timer-memorize', memorize);
+  timer.classList.toggle('timer-warning', !memorize && warning);
   stage.classList.add('taif-stage--timer-active');
 
-  if (warning && taifLastTimerSecond !== seconds) {
+  if (!memorize && warning && taifLastTimerSecond !== seconds) {
     setTaifMotion('count');
-  } else if (!warning && taifCurrentMotion === 'count' && !taifTypewriterActive) {
+  } else if (!memorize && !warning && taifCurrentMotion === 'count' && !taifTypewriterActive) {
     setTaifMotion(taifPresenterState.motion || 'idle');
   }
 
   taifLastTimerSecond = seconds;
 }
 
-function syncGameTimer(gameKey, timeLeft, { active = true, warning } = {}) {
+function syncGameTimer(gameKey, timeLeft, { active = true, warning, memorize = false } = {}) {
   syncTaifTimer(timeLeft, {
-    warning: warning !== undefined ? warning : timeLeft <= 5,
+    warning: warning !== undefined ? warning : (timeLeft <= 5 && !memorize),
     gameKey,
-    active
+    active,
+    memorize
   });
 }
 
@@ -697,6 +700,12 @@ function updateTaifForScreen(screenId) {
       break;
     case 'trivia-category-screen':
       setTaifMood('rules', { text: getTriviaCategoryTaifText() });
+      break;
+    case 'picmerge-mode-screen':
+      setTaifMood('rules', { text: 'اختر نمط تحدي الصور — دور متناوب أو سباق الفرق!' });
+      break;
+    case 'memory-mode-screen':
+      setTaifMood('rules', { text: 'اختر نمط الذاكرة — سهل أو متوسط أو صعب!' });
       break;
     case 'surprise-screen':
       setTaifMood('surprise', { text: '' });

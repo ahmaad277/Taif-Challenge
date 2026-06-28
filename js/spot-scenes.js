@@ -1,166 +1,369 @@
-/* أوجد الفروقات — صور حقيقية مع تعديلات SVG فوقها */
-
-/*
- * SVG viewBox "0 0 100 75" matches the 4:3 aspect ratio of every photo.
- * Overlay shapes are placed in that coordinate space.
- * Difference hit-zones (differences[]) use 0–1 fractions:
- *   x = svg_cx / 100   (fraction of display width)
- *   y = svg_cy / 75    (fraction of display height)
- *   r = hit radius in the same normalized space (~0.08–0.13)
+/* أوجد الفروقات — أزواج صور حقيقية (أصلية + معدّلة بمسح أجزاء بالذكاء الاصطناعي).
+ *
+ * مولّد آليًا عبر scripts/build-spot-puzzles.mjs — لا تعدّله يدويًا؛
+ * عدّل الصور المصدر ثم أعد التوليد.
+ *
+ * differences: كسور 0–1 من مربّع العرض { x, y, r }
+ *   x = كسر العرض، y = كسر الارتفاع، r = نصف قطر منطقة النقر.
  */
 
 const SPOT_PUZZLES = [
-  /* ── 1: الأهرامات ────────────────────────────────────────────────── */
   {
-    type: 'photo-overlay',
-    title: 'الأهرامات',
-    base: 'assets/spot/camels-base-r.jpg',
-    overlays: `
-      <!-- Bird silhouette, upper-right sky (cx≈75, cy≈14) -->
-      <path d="M 67 14 Q 71 10 75 14 Q 79 10 83 14"
-            stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <!-- Cloud, upper-center-left (center≈38,8) -->
-      <ellipse cx="38" cy="8"  rx="12" ry="4.5" fill="white" opacity="0.88"/>
-      <ellipse cx="29" cy="10" rx="8"  ry="3.5"  fill="white" opacity="0.88"/>
-      <ellipse cx="47" cy="10" rx="7"  ry="3"    fill="white" opacity="0.88"/>
-      <!-- Full moon, upper-center (cx≈55, cy≈19) -->
-      <circle cx="55" cy="19" r="6.5" fill="#f0e8c8" stroke="#d8c888" stroke-width="0.9"/>
-      <!-- Red ornament ball, lower-left camel garland area (cx≈8, cy≈61) -->
-      <circle cx="8"  cy="61" r="5"   fill="#e8315f" stroke="#a01030" stroke-width="1"/>
-      <!-- Gold 4-pointed star, lower-right (cx≈80, cy≈61) -->
-      <polygon points="80,56 82.5,58.5 85,61 82.5,63.5 80,66 77.5,63.5 75,61 77.5,58.5"
-               fill="#ffd700" stroke="#cc8800" stroke-width="0.8"/>
-    `,
+    type: 'photo',
+    title: 'لقطة 1',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-01-base.jpg',
+    modified: 'assets/spot/spot-01-mod.jpg',
     differences: [
-      { x: 0.75, y: 0.19, r: 0.10 },
-      { x: 0.38, y: 0.11, r: 0.13 },
-      { x: 0.55, y: 0.25, r: 0.09 },
-      { x: 0.08, y: 0.81, r: 0.09 },
-      { x: 0.80, y: 0.81, r: 0.09 },
+      { x: 0.255, y: 0.782, r: 0.15 },
+      { x: 0.473, y: 0.613, r: 0.07 },
+      { x: 0.586, y: 0.964, r: 0.05 },
     ],
   },
-
-  /* ── 2: فلورنسا ──────────────────────────────────────────────────── */
   {
-    type: 'photo-overlay',
-    title: 'فلورنسا',
-    base: 'assets/spot/city-base-r.jpg',
-    overlays: `
-      <!-- Airplane, upper-left sky (center≈30,12) -->
-      <rect x="22" y="11"   width="16" height="2.5" rx="1.5" fill="#e0e0e0" stroke="#aaa" stroke-width="0.5"/>
-      <polygon points="27,11 22,9 27,9"           fill="#cccccc"/>
-      <polygon points="35,11 39,13.5 35,13.5"     fill="#cccccc"/>
-      <!-- Bird, left mid-sky (cx≈15, cy≈30) -->
-      <path d="M 7 30 Q 11 26 15 30 Q 19 26 23 30"
-            stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <!-- Cloud, upper-right (center≈63,7) -->
-      <ellipse cx="63" cy="7"  rx="13" ry="5"   fill="white" opacity="0.84"/>
-      <ellipse cx="54" cy="9"  rx="9"  ry="3.5" fill="white" opacity="0.84"/>
-      <ellipse cx="72" cy="9"  rx="8"  ry="3"   fill="white" opacity="0.84"/>
-      <!-- Full moon, far-right sky (cx≈84, cy≈11) -->
-      <circle cx="84" cy="11" r="6"   fill="#f0e8c8" stroke="#d8c888" stroke-width="0.9"/>
-      <!-- Red ball, lower-right street area (cx≈70, cy≈68) -->
-      <circle cx="70" cy="68" r="4.5" fill="#e8315f" stroke="#a01030" stroke-width="1"/>
-    `,
+    type: 'photo',
+    title: 'لقطة 2',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-02-base.jpg',
+    modified: 'assets/spot/spot-02-mod.jpg',
     differences: [
-      { x: 0.30, y: 0.16, r: 0.11 },
-      { x: 0.15, y: 0.40, r: 0.10 },
-      { x: 0.63, y: 0.09, r: 0.13 },
-      { x: 0.84, y: 0.15, r: 0.09 },
-      { x: 0.70, y: 0.91, r: 0.09 },
+      { x: 0.843, y: 0.361, r: 0.15 },
     ],
   },
-
-  /* ── 3: الشاطئ ───────────────────────────────────────────────────── */
   {
-    type: 'photo-overlay',
-    title: 'الشاطئ',
-    base: 'assets/spot/beach-base.jpg',
-    overlays: `
-      <!-- Bird, upper-right sky (cx≈72, cy≈12) -->
-      <path d="M 64 12 Q 68 8 72 12 Q 76 8 80 12"
-            stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <!-- Cloud, upper-center-left (center≈28,7) -->
-      <ellipse cx="28" cy="7"  rx="12" ry="5"   fill="white" opacity="0.86"/>
-      <ellipse cx="19" cy="9"  rx="8"  ry="3.5" fill="white" opacity="0.86"/>
-      <ellipse cx="37" cy="9"  rx="7"  ry="3"   fill="white" opacity="0.86"/>
-      <!-- Full moon, upper-left (cx≈10, cy≈12) -->
-      <circle cx="10" cy="12" r="5.5" fill="#f0e8c8" stroke="#d8c888" stroke-width="0.9"/>
-      <!-- Sun umbrella, lower-right beach (pole base≈82, canopy cy≈60) -->
-      <rect x="81.3" y="58" width="1.5" height="13" fill="#555" rx="0.5"/>
-      <ellipse cx="82" cy="58" rx="9"  ry="4"   fill="#ffcc00" stroke="#cc9900" stroke-width="0.9" opacity="0.93"/>
-      <!-- Small sailing boat, center water area (hull≈50,40) -->
-      <polygon points="44,41 56,41 54,45 46,45" fill="white"   stroke="#888" stroke-width="0.5"/>
-      <rect x="49.5" y="34"  width="1.5" height="7" fill="#666"/>
-      <polygon points="49.5,34 49.5,40 56,40"       fill="#cc3333" opacity="0.85"/>
-    `,
+    type: 'photo',
+    title: 'لقطة 3',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-03-base.jpg',
+    modified: 'assets/spot/spot-03-mod.jpg',
     differences: [
-      { x: 0.72, y: 0.16, r: 0.10 },
-      { x: 0.28, y: 0.09, r: 0.12 },
-      { x: 0.10, y: 0.16, r: 0.09 },
-      { x: 0.82, y: 0.80, r: 0.10 },
-      { x: 0.50, y: 0.52, r: 0.10 },
+      { x: 0.198, y: 0.293, r: 0.15 },
+      { x: 0.327, y: 0.941, r: 0.15 },
     ],
   },
-
-  /* ── 4: لندن ─────────────────────────────────────────────────────── */
   {
-    type: 'photo-overlay',
-    title: 'لندن',
-    base: 'assets/spot/london-base.jpg',
-    overlays: `
-      <!-- Bird, upper-center sky (cx≈50, cy≈14) -->
-      <path d="M 42 14 Q 46 10 50 14 Q 54 10 58 14"
-            stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <!-- Cloud, upper-right (center≈76,7) -->
-      <ellipse cx="76" cy="7"  rx="12" ry="5"   fill="white" opacity="0.84"/>
-      <ellipse cx="67" cy="9"  rx="8"  ry="3.5" fill="white" opacity="0.84"/>
-      <ellipse cx="85" cy="9"  rx="7"  ry="3"   fill="white" opacity="0.84"/>
-      <!-- Full moon, far-right sky (cx≈88, cy≈15) -->
-      <circle cx="88" cy="15" r="6"   fill="#f0e8c8" stroke="#d8c888" stroke-width="0.9"/>
-      <!-- Red ball, lower-center street (cx≈35, cy≈68) -->
-      <circle cx="35" cy="68" r="4.5" fill="#e8315f" stroke="#a01030" stroke-width="1"/>
-      <!-- Gold 4-pointed star, lower-left (cx≈15, cy≈68) -->
-      <polygon points="15,63 17.5,65.5 20,68 17.5,70.5 15,73 12.5,70.5 10,68 12.5,65.5"
-               fill="#ffd700" stroke="#cc8800" stroke-width="0.8"/>
-    `,
+    type: 'photo',
+    title: 'لقطة 4',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-04-base.jpg',
+    modified: 'assets/spot/spot-04-mod.jpg',
     differences: [
-      { x: 0.50, y: 0.19, r: 0.10 },
-      { x: 0.76, y: 0.09, r: 0.12 },
-      { x: 0.88, y: 0.20, r: 0.09 },
-      { x: 0.35, y: 0.91, r: 0.09 },
-      { x: 0.15, y: 0.91, r: 0.09 },
+      { x: 0.313, y: 0.071, r: 0.15 },
+      { x: 0.291, y: 0.291, r: 0.122 },
+      { x: 0.593, y: 0.445, r: 0.068 },
+      { x: 0.598, y: 0.343, r: 0.061 },
     ],
   },
-
-  /* ── 5: الماراثون ────────────────────────────────────────────────── */
   {
-    type: 'photo-overlay',
-    title: 'الماراثون',
-    base: 'assets/spot/marathon-base.jpg',
-    overlays: `
-      <!-- Bird, upper-center-right sky (cx≈60, cy≈8) -->
-      <path d="M 52 8 Q 56 4 60 8 Q 64 4 68 8"
-            stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <!-- Cloud, upper-left (center≈22,6) -->
-      <ellipse cx="22" cy="6"  rx="11" ry="4.5" fill="white" opacity="0.85"/>
-      <ellipse cx="13" cy="8"  rx="7"  ry="3.5" fill="white" opacity="0.85"/>
-      <ellipse cx="31" cy="8"  rx="7"  ry="3"   fill="white" opacity="0.85"/>
-      <!-- Full moon, far-right sky (cx≈85, cy≈9) -->
-      <circle cx="85" cy="9"  r="5.5" fill="#f0e8c8" stroke="#d8c888" stroke-width="0.9"/>
-      <!-- Red balloon, mid crowd (ball cy≈33, string to 39) -->
-      <circle cx="40" cy="33" r="5.5" fill="#e8315f" stroke="#a01030" stroke-width="0.9"/>
-      <line   x1="40" y1="38.5" x2="40" y2="45" stroke="#444" stroke-width="0.9"/>
-      <!-- Gold 4-pointed star, mid crowd right (cx≈72, cy≈52) -->
-      <polygon points="72,47 74.5,49.5 77,52 74.5,54.5 72,57 69.5,54.5 67,52 69.5,49.5"
-               fill="#ffd700" stroke="#cc8800" stroke-width="0.8"/>
-    `,
+    type: 'photo',
+    title: 'لقطة 5',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-05-base.jpg',
+    modified: 'assets/spot/spot-05-mod.jpg',
     differences: [
-      { x: 0.60, y: 0.11, r: 0.10 },
-      { x: 0.22, y: 0.08, r: 0.12 },
-      { x: 0.85, y: 0.12, r: 0.09 },
-      { x: 0.40, y: 0.44, r: 0.10 },
-      { x: 0.72, y: 0.69, r: 0.09 },
+      { x: 0.791, y: 0.559, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 6',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-07-base.jpg',
+    modified: 'assets/spot/spot-07-mod.jpg',
+    differences: [
+      { x: 0.784, y: 0.879, r: 0.15 },
+      { x: 0.511, y: 0.543, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 7',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-08-base.jpg',
+    modified: 'assets/spot/spot-08-mod.jpg',
+    differences: [
+      { x: 0.448, y: 0.736, r: 0.15 },
+      { x: 0.254, y: 0.521, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 8',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-09-base.jpg',
+    modified: 'assets/spot/spot-09-mod.jpg',
+    differences: [
+      { x: 0.509, y: 0.868, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 9',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-11-base.jpg',
+    modified: 'assets/spot/spot-11-mod.jpg',
+    differences: [
+      { x: 0.302, y: 0.671, r: 0.102 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 10',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-12-base.jpg',
+    modified: 'assets/spot/spot-12-mod.jpg',
+    differences: [
+      { x: 0.237, y: 0.38, r: 0.15 },
+      { x: 0.773, y: 0.414, r: 0.1 },
+      { x: 0.95, y: 0.466, r: 0.109 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 11',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-13-base.jpg',
+    modified: 'assets/spot/spot-13-mod.jpg',
+    differences: [
+      { x: 0.164, y: 0.404, r: 0.15 },
+      { x: 0.702, y: 0.138, r: 0.113 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 12',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-14-base.jpg',
+    modified: 'assets/spot/spot-14-mod.jpg',
+    differences: [
+      { x: 0.455, y: 0.545, r: 0.15 },
+      { x: 0.232, y: 0.693, r: 0.15 },
+      { x: 0.163, y: 0.954, r: 0.054 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 13',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-15-base.jpg',
+    modified: 'assets/spot/spot-15-mod.jpg',
+    differences: [
+      { x: 0.762, y: 0.302, r: 0.135 },
+      { x: 0.852, y: 0.63, r: 0.083 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 14',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-16-base.jpg',
+    modified: 'assets/spot/spot-16-mod.jpg',
+    differences: [
+      { x: 0.87, y: 0.423, r: 0.15 },
+      { x: 0.102, y: 0.298, r: 0.15 },
+      { x: 0.332, y: 0.421, r: 0.102 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 15',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-17-base.jpg',
+    modified: 'assets/spot/spot-17-mod.jpg',
+    differences: [
+      { x: 0.961, y: 0.907, r: 0.111 },
+      { x: 0.005, y: 0.925, r: 0.089 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 16',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-18-base.jpg',
+    modified: 'assets/spot/spot-18-mod.jpg',
+    differences: [
+      { x: 0.727, y: 0.834, r: 0.15 },
+      { x: 0.111, y: 0.836, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 17',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-19-base.jpg',
+    modified: 'assets/spot/spot-19-mod.jpg',
+    differences: [
+      { x: 0.189, y: 0.193, r: 0.15 },
+      { x: 0.439, y: 0.646, r: 0.15 },
+      { x: 0.066, y: 0.041, r: 0.083 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 18',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-20-base.jpg',
+    modified: 'assets/spot/spot-20-mod.jpg',
+    differences: [
+      { x: 0.318, y: 0.611, r: 0.15 },
+      { x: 0.834, y: 0.643, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 19',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-21-base.jpg',
+    modified: 'assets/spot/spot-21-mod.jpg',
+    differences: [
+      { x: 0.046, y: 0.195, r: 0.07 },
+      { x: 0.975, y: 0.186, r: 0.063 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 20',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-22-base.jpg',
+    modified: 'assets/spot/spot-22-mod.jpg',
+    differences: [
+      { x: 0.543, y: 0.463, r: 0.15 },
+      { x: 0.741, y: 0.943, r: 0.087 },
+      { x: 0.777, y: 0.304, r: 0.102 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 21',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-24-base.jpg',
+    modified: 'assets/spot/spot-24-mod.jpg',
+    differences: [
+      { x: 0.646, y: 0.982, r: 0.133 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 22',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-25-base.jpg',
+    modified: 'assets/spot/spot-25-mod.jpg',
+    differences: [
+      { x: 0.318, y: 0.216, r: 0.135 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 23',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-26-base.jpg',
+    modified: 'assets/spot/spot-26-mod.jpg',
+    differences: [
+      { x: 0.898, y: 0.809, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 24',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-27-base.jpg',
+    modified: 'assets/spot/spot-27-mod.jpg',
+    differences: [
+      { x: 0.077, y: 0.163, r: 0.15 },
+      { x: 0.684, y: 0.332, r: 0.142 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 25',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-28-base.jpg',
+    modified: 'assets/spot/spot-28-mod.jpg',
+    differences: [
+      { x: 0.682, y: 0.104, r: 0.15 },
+      { x: 0.875, y: 0.371, r: 0.115 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 26',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-29-base.jpg',
+    modified: 'assets/spot/spot-29-mod.jpg',
+    differences: [
+      { x: 0.813, y: 0.798, r: 0.15 },
+      { x: 0.093, y: 0.386, r: 0.142 },
+      { x: 0.286, y: 0.955, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 27',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-30-base.jpg',
+    modified: 'assets/spot/spot-30-mod.jpg',
+    differences: [
+      { x: 0.341, y: 0.907, r: 0.111 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 28',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-32-base.jpg',
+    modified: 'assets/spot/spot-32-mod.jpg',
+    differences: [
+      { x: 0.259, y: 0.154, r: 0.15 },
+      { x: 0.316, y: 0.845, r: 0.15 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 29',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-33-base.jpg',
+    modified: 'assets/spot/spot-33-mod.jpg',
+    differences: [
+      { x: 0.688, y: 0.386, r: 0.15 },
+      { x: 0.388, y: 0.798, r: 0.15 },
+      { x: 0.143, y: 0.789, r: 0.15 },
+      { x: 0.954, y: 0.77, r: 0.07 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 30',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-35-base.jpg',
+    modified: 'assets/spot/spot-35-mod.jpg',
+    differences: [
+      { x: 0.343, y: 0.314, r: 0.15 },
+      { x: 0.582, y: 0.188, r: 0.122 },
+      { x: 0.18, y: 0.214, r: 0.1 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 31',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-36-base.jpg',
+    modified: 'assets/spot/spot-36-mod.jpg',
+    differences: [
+      { x: 0.138, y: 0.843, r: 0.15 },
+      { x: 0.452, y: 0.895, r: 0.15 },
+      { x: 0.275, y: 0.564, r: 0.129 },
+      { x: 0.361, y: 0.725, r: 0.076 },
+    ],
+  },
+  {
+    type: 'photo',
+    title: 'لقطة 32',
+    aspect: '1 / 1',
+    base: 'assets/spot/spot-37-base.jpg',
+    modified: 'assets/spot/spot-37-mod.jpg',
+    differences: [
+      { x: 0.62, y: 0.846, r: 0.081 },
+      { x: 0.439, y: 0.882, r: 0.05 },
     ],
   },
 ];

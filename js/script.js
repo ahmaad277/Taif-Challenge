@@ -33,10 +33,14 @@ const gameState = {
     timeLeft: 30
   },
   picmerge: {
+    playMode: 'turns',
     shuffledIndices: [],
     poolPointer: 0,
     currentTeamIndex: 0,
     teamRoundCounts: {},
+    completedBattleRounds: 0,
+    penalties: {},
+    penaltyDisplayTeam: null,
     roundsPerTeam: 3,
     currentPuzzle: null,
     questionStartTime: 0,
@@ -59,19 +63,23 @@ const gameState = {
     timeLeft: 60
   },
   memory: {
-    shuffledRoundSeeds: [],
-    poolPointer: 0,
+    playMode: 'medium',
+    gridSize: 3,
     currentTeamIndex: 0,
     teamRoundCounts: {},
     roundsPerTeam: 3,
-    correctOrder: [],
-    currentOrder: [],
-    revealedCells: [],
-    selectedCellIndex: null,
+    cardOrder: [],
+    matched: [],
+    selection: null,
+    flashPair: null,
+    inputLocked: false,
     phase: 'idle',
     questionStartTime: 0,
     answered: false,
     memorizeTimerId: null,
+    memorizeTimeLeft: 0,
+    mismatchFlashId: null,
+    penaltyFlashTimeoutId: null,
     timerId: null,
     feedbackTimeoutId: null,
     timeLeft: 30
@@ -83,14 +91,22 @@ const gameState = {
     teamRoundCounts: {},
     roundsPerTeam: 3,
     currentChallenge: null,
-    evaluatorTeamIndex: 0,
     phase: 'idle',
     answerText: '',
     timerId: null,
     feedbackTimeoutId: null,
     timeLeft: 60,
+    roundDuration: 60,
+    timeSpent: 0,
     isDrawing: false,
     drawListenersBound: false,
+    brushColor: '#1a1a1a',
+    brushSize: 6,
+    tool: 'brush',
+    undoStack: [],
+    redoStack: [],
+    realisticToken: 0,
+    evaluating: false,
     rated: false
   },
   session: {
@@ -113,6 +129,7 @@ const gameState = {
     describerTeamIndex: 0,
     guesserTeamIndex: 0,
     currentWord: '',
+    currentCategory: '',
     phase: 'idle',
     guessStartTime: 0,
     answered: false,
@@ -249,7 +266,7 @@ function showScreen(screenId) {
       clearTypewriter();
     }
   } else if (startBtn) {
-    startBtn.hidden = true;
+    startBtn.hidden = false;
   }
 
   document.querySelectorAll('.screen').forEach((screen) => {
@@ -394,8 +411,8 @@ const GAME_REGISTRY = [
   {
     id: 'picmerge',
     name: 'تحدي الصور',
-    screenId: 'picmerge-screen',
-    start: () => startPicmergeGame(),
+    screenId: 'picmerge-mode-screen',
+    start: () => startPicmergeModeSelect(),
     drawThumb: drawPicmergeThumb,
     enabled: true
   },
@@ -410,8 +427,8 @@ const GAME_REGISTRY = [
   {
     id: 'memory',
     name: 'الذاكرة البصرية',
-    screenId: 'memory-screen',
-    start: () => startMemoryGame(),
+    screenId: 'memory-mode-screen',
+    start: () => startMemoryEntry(),
     drawThumb: drawMemoryThumb,
     enabled: true
   },
@@ -492,10 +509,6 @@ function getCorrectPoints(basePoints = 10) {
 
 function getSpeedBonus(baseBonus = 5) {
   return isSurpriseRound() ? baseBonus * 2 : baseBonus;
-}
-
-function getMemorizeDurationMs() {
-  return isSurpriseRound() ? MEMORY_MEMORIZE_MS * 2 : MEMORY_MEMORIZE_MS;
 }
 
 function calculateSpeedPoints(elapsedSeconds, speedThresholdSeconds) {
@@ -583,6 +596,12 @@ function stopAllGameTimers() {
     if (s.memorizeTimerId) { clearInterval(s.memorizeTimerId); s.memorizeTimerId = null; }
     if (s.readTimerId) { clearInterval(s.readTimerId); s.readTimerId = null; }
     if (s.feedbackTimeoutId) { clearTimeout(s.feedbackTimeoutId); s.feedbackTimeoutId = null; }
+    if (g === 'picmerge' && s.penalties) {
+      clearPicmergePenaltyTimers();
+    }
+    if (g === 'memory') {
+      clearMemoryTimers();
+    }
   });
 }
 
@@ -729,6 +748,14 @@ function startGameById(gameId) {
   if (!entry || !entry.enabled || !entry.start) return;
 
   document.body.classList.toggle('surprise-round-active', isSurpriseRound());
+
+  if (gameId === 'memory' && gameState.session.mode === 'random-all') {
+    gameState.memory.playMode = 'medium';
+    showScreen('memory-screen');
+    startMemoryGame();
+    return;
+  }
+
   showScreen(entry.screenId);
   entry.start();
 }
@@ -865,6 +892,112 @@ function handleTriviaModeSelect(modeId) {
     renderTriviaCategoryScreen();
     showScreen('trivia-category-screen');
   }
+}
+
+/* ——— أنماط تحدي الصور ——— */
+
+function startPicmergeModeSelect() {
+  renderPicmergeModeScreen();
+}
+
+function renderPicmergeModeScreen() {
+  const grid = document.getElementById('picmerge-mode-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const modes = [
+    {
+      id: 'turns',
+      name: 'دور متناوب',
+      desc: 'كل فريق يلعب دوره على صورة مختلفة',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(112,72,232,0.15)" stroke="rgba(112,72,232,0.5)" stroke-width="1.5"/><g stroke="#7048e8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="18" cy="22" r="5"/><circle cx="38" cy="34" r="5"/><path d="M23 22h10l5 7"/></g></svg>`
+    },
+    {
+      id: 'battle',
+      name: 'سباق الفرق',
+      desc: 'جميع الفرق على نفس الصورة — من يجيب أولاً يفوز',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(232,67,147,0.15)" stroke="rgba(232,67,147,0.5)" stroke-width="1.5"/><g stroke="#e84393" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M14 38l8-14 6 8 8-16 6 10"/><circle cx="14" cy="38" r="2" fill="#e84393"/><circle cx="44" cy="26" r="2" fill="#e84393"/></g></svg>`
+    }
+  ];
+
+  modes.forEach((mode) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'trivia-mode-card';
+    card.innerHTML = `
+      <div class="trivia-mode-icon">${mode.svg}</div>
+      <div class="trivia-mode-text">
+        <span class="trivia-mode-name">${mode.name}</span>
+        <span class="trivia-mode-desc">${mode.desc}</span>
+      </div>`;
+    card.addEventListener('click', () => handlePicmergeModeSelect(mode.id));
+    grid.appendChild(card);
+  });
+}
+
+function handlePicmergeModeSelect(modeId) {
+  gameState.picmerge.playMode = modeId;
+  showScreen('picmerge-screen');
+  startPicmergeGame();
+}
+
+/* ——— أنماط الذاكرة البصرية ——— */
+
+function startMemoryEntry() {
+  if (gameState.session.mode === 'random-all') {
+    gameState.memory.playMode = 'medium';
+    showScreen('memory-screen');
+    startMemoryGame();
+    return;
+  }
+  renderMemoryModeScreen();
+}
+
+function renderMemoryModeScreen() {
+  const grid = document.getElementById('memory-mode-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const modes = [
+    {
+      id: 'easy',
+      name: 'سهل',
+      desc: '2×2 — حفظ 7 ث، حل 15 ث',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(92,219,149,0.15)" stroke="rgba(92,219,149,0.5)" stroke-width="1.5"/><g stroke="#5cdb95" stroke-width="2.5" fill="none"><rect x="16" y="16" width="10" height="10" rx="1"/><rect x="30" y="16" width="10" height="10" rx="1"/><rect x="16" y="30" width="10" height="10" rx="1"/><rect x="30" y="30" width="10" height="10" rx="1"/></g></svg>`
+    },
+    {
+      id: 'medium',
+      name: 'متوسط',
+      desc: '3×3 — حفظ 20 ث، حل 45 ث',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(240,199,94,0.12)" stroke="rgba(240,199,94,0.45)" stroke-width="1.5"/><g stroke="#f0c75e" stroke-width="2" fill="none"><rect x="14" y="14" width="8" height="8" rx="1"/><rect x="24" y="14" width="8" height="8" rx="1"/><rect x="34" y="14" width="8" height="8" rx="1"/><rect x="14" y="24" width="8" height="8" rx="1"/><rect x="24" y="24" width="8" height="8" rx="1"/><rect x="34" y="24" width="8" height="8" rx="1"/><rect x="14" y="34" width="8" height="8" rx="1"/><rect x="24" y="34" width="8" height="8" rx="1"/><rect x="34" y="34" width="8" height="8" rx="1"/></g></svg>`
+    },
+    {
+      id: 'hard',
+      name: 'صعب',
+      desc: '4×4 — حفظ 45 ث، حل 60 ث',
+      svg: `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect x="1.5" y="1.5" width="53" height="53" rx="13" fill="rgba(232,67,147,0.15)" stroke="rgba(232,67,147,0.5)" stroke-width="1.5"/><g stroke="#e84393" stroke-width="1.5" fill="none"><rect x="13" y="13" width="7" height="7" rx="0.5"/><rect x="21" y="13" width="7" height="7" rx="0.5"/><rect x="29" y="13" width="7" height="7" rx="0.5"/><rect x="37" y="13" width="7" height="7" rx="0.5"/><rect x="13" y="21" width="7" height="7" rx="0.5"/><rect x="21" y="21" width="7" height="7" rx="0.5"/><rect x="29" y="21" width="7" height="7" rx="0.5"/><rect x="37" y="21" width="7" height="7" rx="0.5"/><rect x="13" y="29" width="7" height="7" rx="0.5"/><rect x="21" y="29" width="7" height="7" rx="0.5"/><rect x="29" y="29" width="7" height="7" rx="0.5"/><rect x="37" y="29" width="7" height="7" rx="0.5"/><rect x="13" y="37" width="7" height="7" rx="0.5"/><rect x="21" y="37" width="7" height="7" rx="0.5"/><rect x="29" y="37" width="7" height="7" rx="0.5"/><rect x="37" y="37" width="7" height="7" rx="0.5"/></g></svg>`
+    }
+  ];
+
+  modes.forEach((mode) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'trivia-mode-card';
+    card.innerHTML = `
+      <div class="trivia-mode-icon">${mode.svg}</div>
+      <div class="trivia-mode-text">
+        <span class="trivia-mode-name">${mode.name}</span>
+        <span class="trivia-mode-desc">${mode.desc}</span>
+      </div>`;
+    card.addEventListener('click', () => handleMemoryModeSelect(mode.id));
+    grid.appendChild(card);
+  });
+}
+
+function handleMemoryModeSelect(modeId) {
+  gameState.memory.playMode = modeId;
+  showScreen('memory-screen');
+  startMemoryGame();
 }
 
 function renderTriviaMultiCategoryScreen() {
@@ -1447,6 +1580,10 @@ function startSentenceTimer() {
 
 let sentenceDragState = null;
 
+// المسافة (بكسل) التي يجب أن يقطعها الضغط قبل اعتباره سحبًا بدل نقرة عابرة —
+// تمنع النقرات السريعة من إزاحة ترتيب الكلمات عن طريق الخطأ.
+const SENTENCE_DRAG_THRESHOLD = 5;
+
 function syncSentenceWordsFromDom() {
   const wordsEl = document.getElementById('sentence-words');
   if (!wordsEl) return;
@@ -1465,122 +1602,196 @@ function clearSentenceDragUi() {
   wordsEl.classList.remove('is-drag-active');
   wordsEl.querySelectorAll('.sentence-word').forEach((chip) => {
     chip.classList.remove('is-dragging', 'is-nudged');
+    if (chip._flipAnim) {
+      chip._flipAnim.cancel();
+      chip._flipAnim = null;
+    }
+    chip.style.transform = '';
+    chip.style.transition = '';
+    chip.style.willChange = '';
   });
 }
 
-function insertSentenceWordAtPointer(clientX) {
-  const wordsEl = document.getElementById('sentence-words');
-  const dragging = wordsEl?.querySelector('.sentence-word.is-dragging');
-  if (!dragging) return;
-
+// تنقل القطعة المسحوبة إلى جوار الكلمة التي يقف فوقها المؤشر، ثم تُمرّر الكلمات
+// المُزاحة إلى مواقعها الجديدة بانسيابية عبر تقنية FLIP بدل القفز المفاجئ.
+// مراعية لاتجاه RTL: وجود المؤشر يمين منتصف كلمة يعني أنها "أسبق في ترتيب القراءة".
+function reorderSentenceWordToPointer(wordsEl, dragging, clientX, clientY) {
   const others = [...wordsEl.querySelectorAll('.sentence-word:not(.is-dragging)')];
-  others.forEach((chip) => chip.classList.remove('is-nudged'));
-
   if (!others.length) return;
 
-  const sorted = others
-    .map((el) => {
-      const rect = el.getBoundingClientRect();
-      return { el, mid: rect.left + rect.width / 2 };
-    })
-    .sort((a, b) => a.mid - b.mid);
-
-  let insertBefore = null;
-  for (const item of sorted) {
-    if (clientX < item.mid) {
-      insertBefore = item.el;
-      item.el.classList.add('is-nudged');
-      break;
+  let closest = null;
+  let closestCenterX = 0;
+  let closestDist = Infinity;
+  for (const chip of others) {
+    const rect = chip.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dist = (cx - clientX) ** 2 + (cy - clientY) ** 2;
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = chip;
+      closestCenterX = cx;
     }
   }
+  if (!closest) return;
 
-  if (insertBefore) {
-    if (dragging !== insertBefore && dragging.nextElementSibling !== insertBefore) {
-      wordsEl.insertBefore(dragging, insertBefore);
-    }
-    return;
-  }
+  let ref = clientX > closestCenterX ? closest : closest.nextElementSibling;
+  if (ref === dragging) ref = dragging.nextElementSibling;
 
-  sorted[sorted.length - 1]?.el.classList.add('is-nudged');
-  if (dragging !== wordsEl.lastElementChild) {
-    wordsEl.appendChild(dragging);
-  }
+  // القطعة بالفعل في موضعها الصحيح — نتجنّب إعادة التخطيط والحركة بلا داعٍ.
+  if (dragging.nextElementSibling === ref) return;
+
+  // FLIP: نلتقط مواضع الكلمات قبل النقل، ننقل، ثم نُحرّكها من القديم إلى الجديد.
+  const before = new Map();
+  others.forEach((chip) => before.set(chip, chip.getBoundingClientRect()));
+
+  wordsEl.insertBefore(dragging, ref);
+
+  others.forEach((chip) => {
+    const prev = before.get(chip);
+    const next = chip.getBoundingClientRect();
+    const dx = prev.left - next.left;
+    const dy = prev.top - next.top;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    animateSentenceWordSlide(chip, dx, dy);
+  });
+}
+
+// تُحرّك الكلمة من إزاحتها القديمة (dx, dy) إلى موضعها الجديد عبر Web Animations API.
+// الميزة: لا تُعدّل style.transform إطلاقًا فلا يبقى أي تحويل عالقًا بعد الانتهاء،
+// ونُلغي أي حركة جارية على الكلمة كي لا تتراكم الإزاحات عند السحب السريع.
+function animateSentenceWordSlide(chip, dx, dy) {
+  if (chip._flipAnim) chip._flipAnim.cancel();
+  const anim = chip.animate(
+    [
+      { transform: `translate(${dx}px, ${dy}px)` },
+      { transform: 'translate(0, 0)' },
+    ],
+    { duration: 220, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' }
+  );
+  chip._flipAnim = anim;
+  anim.onfinish = anim.oncancel = () => {
+    if (chip._flipAnim === anim) chip._flipAnim = null;
+  };
+}
+
+function applySentenceDragTransform(state) {
+  // النقل (translate) يلاحق المؤشر، والتكبير (scale) يطابق هيئة الرفع المعرّفة في
+  // ‎.is-dragging‎ (التي نتجاوز تحويلها هنا مع الإبقاء على ظلّها وحدودها).
+  state.chip.style.transform =
+    `translate(${state.tx}px, ${state.ty}px) scale(1.08)`;
+}
+
+function beginSentenceDrag(state) {
+  state.active = true;
+  state.chip.classList.add('is-dragging');
+  state.chip.style.transition = 'none';
+  state.chip.style.willChange = 'transform';
+  applySentenceDragTransform(state);
+  document.getElementById('sentence-words')?.classList.add('is-drag-active');
+}
+
+function teardownSentenceDragListeners() {
+  window.removeEventListener('pointermove', handleSentenceWordPointerMove);
+  window.removeEventListener('pointerup', handleSentenceWordPointerEnd);
+  window.removeEventListener('pointercancel', handleSentenceWordPointerEnd);
 }
 
 function handleSentenceWordPointerDown(event) {
   if (gameState.sentence.answered || event.button > 0) return;
 
+  // شبكة أمان: إن بقي سحب سابق عالقًا (مثلاً لم يصل له pointerup) ننهيه وننظّف
+  // كل أثر له قبل بدء سحب جديد، فلا تتراكم كلمات عالقة في منتصف السحب.
+  if (sentenceDragState) {
+    teardownSentenceDragListeners();
+    clearSentenceDragUi();
+    sentenceDragState = null;
+  }
+
   event.preventDefault();
 
   const chip = event.currentTarget;
-  chip.draggable = false;
+  const rect = chip.getBoundingClientRect();
   sentenceDragState = {
     pointerId: event.pointerId,
     chip,
+    startX: event.clientX,
+    startY: event.clientY,
+    grabX: event.clientX - rect.left,
+    grabY: event.clientY - rect.top,
+    tx: 0,
+    ty: 0,
+    active: false,
   };
 
-  chip.classList.add('is-dragging');
-  chip.setPointerCapture(event.pointerId);
-  document.getElementById('sentence-words')?.classList.add('is-drag-active');
-
-  chip.addEventListener('pointermove', handleSentenceWordPointerMove);
-  chip.addEventListener('pointerup', handleSentenceWordPointerEnd);
-  chip.addEventListener('pointercancel', handleSentenceWordPointerEnd);
+  // نتتبّع الإيماءة على مستوى النافذة لا على القطعة: هذا يضمن وصول pointermove
+  // وpointerup دائمًا حتى لو تغيّر موضع القطعة في DOM أثناء إعادة الترتيب أو خرج
+  // المؤشر عنها أو فُقد التقاط المؤشر — وإلا يتجمّد السحب وتبقى الكلمة عالقة.
+  window.addEventListener('pointermove', handleSentenceWordPointerMove);
+  window.addEventListener('pointerup', handleSentenceWordPointerEnd);
+  window.addEventListener('pointercancel', handleSentenceWordPointerEnd);
+  // الالتقاط مكمّل (يمنع تمرير الصفحة على اللمس) لكن صحّة السحب لا تعتمد عليه.
+  try {
+    chip.setPointerCapture(event.pointerId);
+  } catch (_) {
+    /* الالتقاط غير متاح — تتبّع النافذة يكفي */
+  }
 }
 
 function handleSentenceWordPointerMove(event) {
-  if (!sentenceDragState || event.pointerId !== sentenceDragState.pointerId) return;
-  insertSentenceWordAtPointer(event.clientX);
+  const state = sentenceDragState;
+  if (!state || event.pointerId !== state.pointerId) return;
+
+  if (!state.active) {
+    const moved = Math.hypot(event.clientX - state.startX, event.clientY - state.startY);
+    if (moved < SENTENCE_DRAG_THRESHOLD) return;
+    beginSentenceDrag(state);
+  }
+
+  const wordsEl = document.getElementById('sentence-words');
+  if (!wordsEl) return;
+
+  reorderSentenceWordToPointer(wordsEl, state.chip, event.clientX, event.clientY);
+
+  // نُبقي القطعة ملتصقة بالمؤشر حتى بعد تغيّر موضعها في الصف: نشتقّ موضعها
+  // الطبيعي من القياس الحيّ ثم نزيحها إليه (rect.left − tx ≈ الموضع الطبيعي).
+  const liveRect = state.chip.getBoundingClientRect();
+  state.tx = event.clientX - state.grabX - (liveRect.left - state.tx);
+  state.ty = event.clientY - state.grabY - (liveRect.top - state.ty);
+  applySentenceDragTransform(state);
+}
+
+function settleSentenceDraggedChip(chip) {
+  chip.style.transition = '';
+  chip.style.willChange = '';
+  // نُثبّت التحويل الحالي قبل إزالته كي تنزلق القطعة إلى مكانها بدل أن تقفز.
+  void chip.offsetWidth;
+  chip.style.transform = '';
+  chip.classList.remove('is-dragging');
 }
 
 function handleSentenceWordPointerEnd(event) {
-  if (!sentenceDragState || event.pointerId !== sentenceDragState.pointerId) return;
+  const state = sentenceDragState;
+  if (!state || event.pointerId !== state.pointerId) return;
 
-  const { chip } = sentenceDragState;
-  chip.releasePointerCapture(event.pointerId);
-  chip.removeEventListener('pointermove', handleSentenceWordPointerMove);
-  chip.removeEventListener('pointerup', handleSentenceWordPointerEnd);
-  chip.removeEventListener('pointercancel', handleSentenceWordPointerEnd);
+  const { chip } = state;
+  try {
+    chip.releasePointerCapture(event.pointerId);
+  } catch (_) {
+    /* المؤشر مُحرَّر مسبقًا */
+  }
+  teardownSentenceDragListeners();
 
-  syncSentenceWordsFromDom();
-  chip.draggable = !gameState.sentence.answered;
-  clearSentenceDragUi();
   sentenceDragState = null;
-}
+  document.getElementById('sentence-words')?.classList.remove('is-drag-active');
 
-function handleSentenceWordDragStart(event) {
-  if (gameState.sentence.answered) {
-    event.preventDefault();
+  if (!state.active) {
+    chip.style.willChange = '';
     return;
   }
 
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', event.currentTarget.dataset.index || '0');
-  requestAnimationFrame(() => event.currentTarget.classList.add('is-dragging'));
-  document.getElementById('sentence-words')?.classList.add('is-drag-active');
-}
-
-function handleSentenceWordsDragOver(event) {
-  event.preventDefault();
-  if (gameState.sentence.answered) return;
-  insertSentenceWordAtPointer(event.clientX);
-}
-
-function handleSentenceWordDragEnd() {
   syncSentenceWordsFromDom();
-  clearSentenceDragUi();
-}
-
-function bindSentenceWordsContainer() {
-  const wordsEl = document.getElementById('sentence-words');
-  if (!wordsEl || wordsEl.dataset.bound === '1') return;
-
-  wordsEl.dataset.bound = '1';
-  wordsEl.addEventListener('dragover', handleSentenceWordsDragOver);
-  wordsEl.addEventListener('drop', (event) => {
-    event.preventDefault();
-    handleSentenceWordDragEnd();
-  });
+  settleSentenceDraggedChip(chip);
 }
 
 function renderSentenceWords() {
@@ -1596,17 +1807,11 @@ function renderSentenceWords() {
     chip.className = 'sentence-word';
     chip.textContent = word;
     chip.dataset.index = String(index);
-    chip.draggable = !gameState.sentence.answered;
     chip.setAttribute('role', 'listitem');
-
     chip.addEventListener('pointerdown', handleSentenceWordPointerDown);
-    chip.addEventListener('dragstart', handleSentenceWordDragStart);
-    chip.addEventListener('dragend', handleSentenceWordDragEnd);
 
     wordsEl.appendChild(chip);
   });
-
-  bindSentenceWordsContainer();
 }
 
 function advanceSentenceTurn() {
@@ -2106,14 +2311,29 @@ function isPicmergeAnswerCorrect(puzzle, inputText) {
   return answers.includes(normalized);
 }
 
+function clearPicmergePenaltyTimers() {
+  const { penalties } = gameState.picmerge;
+  Object.keys(penalties).forEach((teamName) => {
+    stopPicmergePenalty(teamName);
+  });
+  gameState.picmerge.penalties = {};
+  gameState.picmerge.penaltyDisplayTeam = null;
+  hideTaifGameTimer();
+}
+
 function clearPicmergeTimers() {
   stopPicmergeTimer();
+  clearPicmergePenaltyTimers();
 
   const { picmerge } = gameState;
   if (picmerge.feedbackTimeoutId) {
     clearTimeout(picmerge.feedbackTimeoutId);
     picmerge.feedbackTimeoutId = null;
   }
+}
+
+function isPicmergeBattleComplete() {
+  return gameState.picmerge.completedBattleRounds >= gameState.picmerge.roundsPerTeam;
 }
 
 function isPicmergeComplete() {
@@ -2207,6 +2427,188 @@ function setPicmergeInputEnabled(enabled) {
   if (submitBtn) submitBtn.disabled = !enabled;
 }
 
+function setupPicmergeUILayout(mode) {
+  const screen = document.getElementById('picmerge-screen');
+  const turnRow = document.getElementById('picmerge-input-row');
+  const battleInputs = document.getElementById('picmerge-battle-inputs');
+  const timerEl = document.getElementById('picmerge-timer');
+  const teamLabelEl = document.getElementById('picmerge-team-label');
+  const isBattle = mode === 'battle';
+
+  screen?.classList.toggle('picmerge-screen--battle', isBattle);
+
+  if (turnRow) turnRow.hidden = isBattle;
+  if (battleInputs) {
+    battleInputs.hidden = !isBattle;
+    if (isBattle) renderPicmergeBattleInputs();
+  }
+  if (timerEl) timerEl.hidden = isBattle;
+
+  if (isBattle && teamLabelEl) {
+    teamLabelEl.textContent = 'جميع الفرق — من يجيب أولاً يفوز!';
+    teamLabelEl.style.removeProperty('color');
+  }
+}
+
+function renderPicmergeBattleInputs() {
+  const container = document.getElementById('picmerge-battle-inputs');
+  if (!container) return;
+  container.innerHTML = '';
+
+  gameState.teams.forEach((teamName, index) => {
+    const row = document.createElement('div');
+    row.className = 'picmerge-battle-row';
+    row.dataset.teamIndex = String(index);
+
+    const label = document.createElement('span');
+    label.className = 'picmerge-battle-team-label';
+    label.textContent = teamName;
+    applyTeamLabelColor(label, teamName);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'picmerge-battle-input-wrap';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'picmerge-input ui-input picmerge-battle-input';
+    input.placeholder = 'اكتب الكلمة…';
+    input.maxLength = 40;
+    input.dataset.teamIndex = String(index);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-primary picmerge-battle-submit';
+    btn.textContent = 'تخمين';
+    btn.dataset.teamIndex = String(index);
+
+    wrap.appendChild(input);
+    wrap.appendChild(btn);
+    row.appendChild(label);
+    row.appendChild(wrap);
+    container.appendChild(row);
+
+    btn.addEventListener('click', () => handlePicmergeBattleSubmit(index));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        handlePicmergeBattleSubmit(index);
+      }
+    });
+  });
+}
+
+function getPicmergeBattleRow(teamIndex) {
+  return document.querySelector(`.picmerge-battle-row[data-team-index="${teamIndex}"]`);
+}
+
+function setPicmergeBattleInputEnabled(teamIndex, enabled) {
+  const row = getPicmergeBattleRow(teamIndex);
+  if (!row) return;
+  const input = row.querySelector('.picmerge-battle-input');
+  const btn = row.querySelector('.picmerge-battle-submit');
+  if (input) input.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+function updatePicmergePenaltyTimerDisplay() {
+  const { picmerge } = gameState;
+  const teamName = picmerge.penaltyDisplayTeam;
+  const penalty = teamName ? picmerge.penalties[teamName] : null;
+
+  if (!penalty || !teamName) {
+    hideTaifGameTimer();
+    return;
+  }
+
+  const timeLeft = penalty.timeLeft;
+  const timerEl = document.getElementById('picmerge-timer');
+  if (timerEl) {
+    timerEl.textContent = String(timeLeft);
+    timerEl.classList.toggle('timer-warning', timeLeft <= 5);
+  }
+  maybePlayTimerTick(timeLeft, 'picmerge');
+  syncGameTimer('picmerge', timeLeft, { active: true });
+}
+
+function pickNextPicmergePenaltyDisplayTeam() {
+  const { penalties } = gameState.picmerge;
+  const teamNames = Object.keys(penalties);
+
+  if (teamNames.length === 0) {
+    gameState.picmerge.penaltyDisplayTeam = null;
+    hideTaifGameTimer();
+    return;
+  }
+
+  let nextTeam = teamNames[0];
+  let minTime = penalties[nextTeam].timeLeft;
+  teamNames.forEach((name) => {
+    if (penalties[name].timeLeft < minTime) {
+      minTime = penalties[name].timeLeft;
+      nextTeam = name;
+    }
+  });
+
+  gameState.picmerge.penaltyDisplayTeam = nextTeam;
+  updatePicmergePenaltyTimerDisplay();
+}
+
+function stopPicmergePenalty(teamName) {
+  const entry = gameState.picmerge.penalties[teamName];
+  if (entry?.timerId) {
+    clearInterval(entry.timerId);
+  }
+  delete gameState.picmerge.penalties[teamName];
+
+  const teamIndex = gameState.teams.indexOf(teamName);
+  const row = getPicmergeBattleRow(teamIndex);
+  row?.classList.remove('picmerge-battle-row--penalized');
+
+  if (gameState.picmerge.penaltyDisplayTeam === teamName) {
+    pickNextPicmergePenaltyDisplayTeam();
+  }
+}
+
+function startPicmergePenalty(teamName) {
+  const { picmerge } = gameState;
+  if (picmerge.answered) return;
+
+  const teamIndex = gameState.teams.indexOf(teamName);
+  if (teamIndex === -1) return;
+
+  stopPicmergePenalty(teamName);
+
+  const row = getPicmergeBattleRow(teamIndex);
+  const input = row?.querySelector('.picmerge-battle-input');
+  if (input) input.value = '';
+
+  setPicmergeBattleInputEnabled(teamIndex, false);
+  row?.classList.add('picmerge-battle-row--penalized');
+
+  const duration = getRoundDuration(15);
+  picmerge.penaltyDisplayTeam = teamName;
+  updatePicmergePenaltyTimerDisplay();
+
+  picmerge.penalties[teamName] = {
+    timeLeft: duration,
+    timerId: setInterval(() => {
+      const penalty = picmerge.penalties[teamName];
+      if (!penalty) return;
+
+      penalty.timeLeft -= 1;
+      if (picmerge.penaltyDisplayTeam === teamName) {
+        updatePicmergePenaltyTimerDisplay();
+      }
+
+      if (penalty.timeLeft <= 0) {
+        stopPicmergePenalty(teamName);
+        if (!picmerge.answered) {
+          setPicmergeBattleInputEnabled(teamIndex, true);
+        }
+      }
+    }, 1000)
+  };
+}
+
 function showPicmergeImage(puzzle) {
   const imageEl = document.getElementById('picmerge-image');
   const fallbackEl = document.getElementById('picmerge-image-fallback');
@@ -2289,7 +2691,7 @@ function finishPicmergeRound(isCorrect, points, message) {
 }
 
 function handlePicmergeSubmit() {
-  if (gameState.picmerge.answered) return;
+  if (gameState.picmerge.answered || gameState.picmerge.playMode !== 'turns') return;
 
   const inputEl = document.getElementById('picmerge-input');
   const guessText = normalizePicmergeText(inputEl?.value || '');
@@ -2308,6 +2710,49 @@ function handlePicmergeSubmit() {
   showPicmergeFeedback('خطأ! حاول مرة أخرى', false);
 }
 
+function handlePicmergeBattleSubmit(teamIndex) {
+  const { picmerge } = gameState;
+  if (picmerge.answered || picmerge.playMode !== 'battle') return;
+
+  const teamName = gameState.teams[teamIndex];
+  if (!teamName || picmerge.penalties[teamName]) return;
+
+  const row = getPicmergeBattleRow(teamIndex);
+  const input = row?.querySelector('.picmerge-battle-input');
+  const guessText = normalizePicmergeText(input?.value || '');
+  if (!guessText) return;
+
+  const isCorrect = isPicmergeAnswerCorrect(picmerge.currentPuzzle, guessText);
+  const elapsedSeconds = (Date.now() - picmerge.questionStartTime) / 1000;
+
+  if (isCorrect) {
+    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.picmerge);
+    finishPicmergeBattleRound(teamName, points, `صح! ${teamName} +${points} نقطة${bonusText}`);
+    return;
+  }
+
+  playLoseSound();
+  startPicmergePenalty(teamName);
+  if (typeof maybeTaifLoseQuip === 'function') maybeTaifLoseQuip();
+}
+
+function finishPicmergeBattleRound(teamName, points, message) {
+  gameState.picmerge.answered = true;
+  clearPicmergePenaltyTimers();
+
+  gameState.teams.forEach((_, index) => {
+    setPicmergeBattleInputEnabled(index, false);
+  });
+
+  addTeamScore(teamName, points);
+  showPicmergeFeedback(message, true);
+  if (typeof taifQuipCorrect === 'function') taifQuipCorrect();
+
+  gameState.picmerge.completedBattleRounds += 1;
+  updatePicmergeScoresDisplay();
+  scheduleNextPicmergeRound();
+}
+
 function handlePicmergeTimeout() {
   if (gameState.picmerge.answered) return;
 
@@ -2319,6 +2764,11 @@ function handlePicmergeTimeout() {
 function showNextPicmergeRound() {
   clearPicmergeTimers();
   hidePicmergeFeedback();
+
+  if (gameState.picmerge.playMode === 'battle') {
+    showNextPicmergeBattleRound();
+    return;
+  }
 
   if (isPicmergeComplete()) {
     finishPicmergeGame();
@@ -2363,6 +2813,35 @@ function showNextPicmergeRound() {
   startPicmergeTimer();
 }
 
+function showNextPicmergeBattleRound() {
+  if (isPicmergeBattleComplete()) {
+    finishPicmergeGame();
+    return;
+  }
+
+  const puzzle = getNextPicmergePuzzle();
+  const { picmerge } = gameState;
+
+  picmerge.currentPuzzle = puzzle;
+  picmerge.answered = false;
+  picmerge.questionStartTime = Date.now();
+
+  const progressEl = document.getElementById('picmerge-progress');
+  if (progressEl) {
+    progressEl.textContent = `التحدي ${picmerge.completedBattleRounds + 1} من ${picmerge.roundsPerTeam}`;
+  }
+
+  gameState.teams.forEach((_, index) => {
+    const row = getPicmergeBattleRow(index);
+    const input = row?.querySelector('.picmerge-battle-input');
+    if (input) input.value = '';
+    setPicmergeBattleInputEnabled(index, true);
+  });
+
+  showPicmergeImage(puzzle);
+  updatePicmergeScoresDisplay();
+}
+
 function finishPicmergeGame() {
   clearPicmergeTimers();
   playGameCompleteSound();
@@ -2378,6 +2857,9 @@ function startPicmergeGame() {
   gameState.picmerge.poolPointer = 0;
   gameState.picmerge.currentTeamIndex = 0;
   gameState.picmerge.teamRoundCounts = {};
+  gameState.picmerge.completedBattleRounds = 0;
+  gameState.picmerge.penalties = {};
+  gameState.picmerge.penaltyDisplayTeam = null;
   gameState.picmerge.answered = false;
   gameState.picmerge.currentPuzzle = null;
 
@@ -2385,6 +2867,7 @@ function startPicmergeGame() {
     gameState.picmerge.teamRoundCounts[team] = 0;
   });
 
+  setupPicmergeUILayout(gameState.picmerge.playMode);
   showNextPicmergeRound();
 }
 
@@ -2484,6 +2967,12 @@ function renderSpotCanvases(puzzle) {
   const leftScene = document.getElementById('spot-left-scene');
   const rightScene = document.getElementById('spot-right-scene');
   if (!leftScene || !rightScene) return;
+
+  // Photo pairs may be square (or any ratio); keep both scenes matching the
+  // image box so the normalized difference coordinates line up with clicks.
+  const aspect = puzzle.aspect || '4 / 3';
+  leftScene.style.aspectRatio = aspect;
+  rightScene.style.aspectRatio = aspect;
 
   if (puzzle.type === 'photo') {
     leftScene.innerHTML = `<img src="${puzzle.base}" class="spot-photo" alt="الأصلية" draggable="false">`;
@@ -2686,18 +3175,38 @@ function showNextSpotRound() {
   startSpotTimer();
 }
 
-const MEMORY_GRID_SIZE = 4;
-const MEMORY_CELL_COUNT = MEMORY_GRID_SIZE * MEMORY_GRID_SIZE;
-const MEMORY_ICON_SIZE = 80;
-const MEMORY_MEMORIZE_MS = 5000;
+const MEMORY_MODES = {
+  easy: { gridSize: 2, memorizeSec: 7, playSec: 15 },
+  medium: { gridSize: 3, memorizeSec: 20, playSec: 45 },
+  hard: { gridSize: 4, memorizeSec: 45, playSec: 60 }
+};
+const MEMORY_MISMATCH_PENALTY_SEC = 2;
+const MEMORY_MISMATCH_FLASH_MS = 1000;
+
+function getMemoryModeConfig() {
+  return MEMORY_MODES[gameState.memory.playMode] || MEMORY_MODES.medium;
+}
+
+function getMemoryCellCount() {
+  const { gridSize } = getMemoryModeConfig();
+  return gridSize * gridSize;
+}
 
 function clearMemoryTimers() {
   taifExitGridMode();
   setTaifLayout('compact');
   const { memory } = gameState;
   if (memory.memorizeTimerId) {
-    clearTimeout(memory.memorizeTimerId);
+    clearInterval(memory.memorizeTimerId);
     memory.memorizeTimerId = null;
+  }
+  if (memory.mismatchFlashId) {
+    clearTimeout(memory.mismatchFlashId);
+    memory.mismatchFlashId = null;
+  }
+  if (memory.penaltyFlashTimeoutId) {
+    clearTimeout(memory.penaltyFlashTimeoutId);
+    memory.penaltyFlashTimeoutId = null;
   }
   if (memory.timerId) {
     clearInterval(memory.timerId);
@@ -2707,6 +3216,8 @@ function clearMemoryTimers() {
     clearTimeout(memory.feedbackTimeoutId);
     memory.feedbackTimeoutId = null;
   }
+  memory.inputLocked = false;
+  memory.flashPair = null;
 }
 
 function isMemoryComplete() {
@@ -2734,25 +3245,35 @@ function findActiveMemoryTeamIndex() {
   return -1;
 }
 
-function getNextMemoryRoundOrder() {
-  const { memory } = gameState;
+const MEMORY_EMPTY_CELL = -1;
 
-  if (memory.poolPointer >= memory.shuffledRoundSeeds.length) {
-    memory.shuffledRoundSeeds = shuffleArray(
-      MEMORY_ICON_PUZZLES.map((_, index) => index)
-    );
-    memory.poolPointer = 0;
+function getMemoryPairCount() {
+  const mode = getMemoryModeConfig();
+  if (mode.gridSize === 3) return 4;
+  return (mode.gridSize * mode.gridSize) / 2;
+}
+
+function isMemoryEmptyCell(index) {
+  return gameState.memory.cardOrder[index] === MEMORY_EMPTY_CELL;
+}
+
+function buildMemoryRoundLayout() {
+  const mode = getMemoryModeConfig();
+  const pairCount = getMemoryPairCount();
+  const icons = shuffleArray(MEMORY_ICON_PUZZLES.map((_, index) => index)).slice(0, pairCount);
+  const cards = shuffleArray([...icons, ...icons]);
+
+  if (mode.gridSize === 3) {
+    cards.splice(4, 0, MEMORY_EMPTY_CELL);
   }
 
-  const seedIndex = memory.shuffledRoundSeeds[memory.poolPointer];
-  memory.poolPointer += 1;
+  return cards;
+}
 
-  const allIndices = MEMORY_ICON_PUZZLES.map((_, index) => index);
-  const withoutSeed = allIndices.filter((index) => index !== seedIndex);
-  const shuffledRest = shuffleArray(withoutSeed);
-  const selected = [seedIndex, ...shuffledRest.slice(0, MEMORY_CELL_COUNT - 1)];
-
-  return shuffleArray(selected);
+function syncMemoryBoardWrapSize() {
+  const wrap = document.querySelector('.memory-board-wrap');
+  const gridSize = String(getMemoryModeConfig().gridSize);
+  if (wrap) wrap.dataset.size = gridSize;
 }
 
 function updateMemoryScoresDisplay() {
@@ -2778,10 +3299,27 @@ function showMemoryFeedback(message, isCorrect) {
   feedbackEl.classList.toggle('incorrect', !isCorrect);
 }
 
+function updateMemoryMemorizeTimerDisplay() {
+  const { memory } = gameState;
+  const timerEl = document.getElementById('memory-timer');
+  if (timerEl) {
+    timerEl.textContent = String(memory.memorizeTimeLeft);
+    timerEl.classList.remove('timer-warning');
+    timerEl.classList.toggle('timer-memorize', memory.phase === 'memorize');
+  }
+
+  syncGameTimer('memory', memory.memorizeTimeLeft, {
+    active: !!memory.memorizeTimerId && memory.phase === 'memorize',
+    memorize: true,
+    warning: false
+  });
+}
+
 function updateMemoryTimerDisplay() {
   const timerEl = document.getElementById('memory-timer');
   if (!timerEl) return;
 
+  timerEl.classList.remove('timer-memorize');
   timerEl.textContent = String(gameState.memory.timeLeft);
   timerEl.classList.toggle('timer-warning', gameState.memory.timeLeft <= 5);
   maybePlayTimerTick(gameState.memory.timeLeft, 'memory');
@@ -2790,25 +3328,43 @@ function updateMemoryTimerDisplay() {
   });
 }
 
+function showMemoryPenaltyFlash() {
+  const el = document.getElementById('memory-penalty-flash');
+  if (!el) return;
+
+  const { memory } = gameState;
+  el.hidden = false;
+  el.textContent = '−2';
+
+  if (memory.penaltyFlashTimeoutId) {
+    clearTimeout(memory.penaltyFlashTimeoutId);
+  }
+
+  memory.penaltyFlashTimeoutId = setTimeout(() => {
+    memory.penaltyFlashTimeoutId = null;
+    el.hidden = true;
+  }, 1000);
+}
+
 function setMemoryPhaseUI(phase) {
   const timerEl = document.getElementById('memory-timer');
-  const checkBtn = document.getElementById('memory-check-btn');
   const hintEl = document.getElementById('memory-phase-hint');
+  const penaltyEl = document.getElementById('memory-penalty-flash');
 
   if (phase === 'memorize') {
-    if (timerEl) timerEl.hidden = true;
-    if (checkBtn) checkBtn.hidden = true;
-    if (hintEl) hintEl.textContent = 'احفظ ترتيب الصور!';
-    hideTaifGameTimer();
+    if (timerEl) {
+      timerEl.hidden = false;
+      timerEl.classList.add('timer-memorize');
+      timerEl.classList.remove('timer-warning');
+    }
+    if (penaltyEl) penaltyEl.hidden = true;
+    if (hintEl) hintEl.textContent = 'احفظ أماكن الصور!';
   } else if (phase === 'play') {
-    if (timerEl) timerEl.hidden = false;
-    if (checkBtn) {
-      checkBtn.hidden = false;
-      checkBtn.disabled = false;
+    if (timerEl) {
+      timerEl.hidden = false;
+      timerEl.classList.remove('timer-memorize');
     }
-    if (hintEl) {
-      hintEl.textContent = 'انقر على الخلايا الفارغة لإظهار الصور، ثم بدّل مواقعها لإعادة الترتيب الأصلي';
-    }
+    if (hintEl) hintEl.textContent = 'افتح خليتين متطابقتين';
   }
 }
 
@@ -2816,52 +3372,114 @@ function drawMemoryIcon(canvas, puzzleIndex) {
   const puzzle = MEMORY_ICON_PUZZLES[puzzleIndex];
   if (!puzzle) return;
 
+  const size = 128;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.round(MEMORY_ICON_SIZE * dpr);
-  canvas.height = Math.round(MEMORY_ICON_SIZE * dpr);
-  canvas.style.width = `${MEMORY_ICON_SIZE}px`;
-  canvas.style.height = `${MEMORY_ICON_SIZE}px`;
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  ctx.fillStyle = C.surfaceCard;
-  ctx.fillRect(0, 0, MEMORY_ICON_SIZE, MEMORY_ICON_SIZE);
-  puzzle.draw(ctx, MEMORY_ICON_SIZE);
+  ctx.fillStyle = '#2a2a44';
+  ctx.fillRect(0, 0, size, size);
+
+  // محتوى المستخدم: صورة مرفوعة بدل دالة الرسم
+  if (puzzle.image) {
+    const img = puzzle._imgEl || (puzzle._imgEl = Object.assign(new Image(), { src: puzzle.image }));
+    if (!(img.complete && img.naturalWidth)) {
+      img.onload = () => drawMemoryIcon(canvas, puzzleIndex);
+      return;
+    }
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - side) / 2;
+    const sy = (img.naturalHeight - side) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(6, 6, size - 12, size - 12, size * 0.16);
+    ctx.clip();
+    ctx.drawImage(img, sx, sy, side, side, 6, 6, size - 12, size - 12);
+    ctx.restore();
+    return;
+  }
+
+  const iconSize = size * 0.72;
+  const pad = (size - iconSize) / 2;
+  ctx.save();
+  ctx.translate(pad, pad);
+  puzzle.draw(ctx, iconSize);
+  ctx.restore();
 }
 
 function isMemoryCellVisible(index) {
   const { memory } = gameState;
-  return memory.phase === 'memorize' || memory.revealedCells[index];
+  if (isMemoryEmptyCell(index)) return false;
+  if (memory.phase === 'memorize') return true;
+  if (memory.matched[index]) return true;
+
+  if (memory.flashPair && (memory.flashPair.a === index || memory.flashPair.b === index)) {
+    return true;
+  }
+
+  if (memory.selection === index) return true;
+
+  return false;
+}
+
+function isMemoryCellInteractive(index) {
+  const { memory } = gameState;
+  if (memory.phase !== 'play' || memory.answered || memory.inputLocked) return false;
+  if (isMemoryEmptyCell(index)) return false;
+  if (memory.matched[index]) return false;
+  return true;
 }
 
 function renderMemoryGrid() {
   const gridEl = document.getElementById('memory-grid');
   if (!gridEl) return;
 
-  gridEl.innerHTML = '';
   const { memory } = gameState;
-  const order = memory.phase === 'memorize' ? memory.correctOrder : memory.currentOrder;
+  const cellCount = memory.cardOrder.length;
+  gridEl.innerHTML = '';
+  gridEl.dataset.size = String(getMemoryModeConfig().gridSize);
+  syncMemoryBoardWrapSize();
 
-  for (let i = 0; i < MEMORY_CELL_COUNT; i += 1) {
+  for (let i = 0; i < cellCount; i += 1) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'memory-cell';
     button.dataset.index = String(i);
 
+    if (isMemoryEmptyCell(i)) {
+      button.classList.add('empty');
+      button.disabled = true;
+      gridEl.appendChild(button);
+      continue;
+    }
+
     const visible = isMemoryCellVisible(i);
     if (!visible) {
       button.classList.add('hidden');
     }
-    if (memory.selectedCellIndex === i) {
+    if (memory.matched[i]) {
+      button.classList.add('matched');
+    }
+    if (memory.selection === i) {
       button.classList.add('selected');
     }
 
-    if (visible) {
-      const canvas = document.createElement('canvas');
-      drawMemoryIcon(canvas, order[i]);
-      button.appendChild(canvas);
+    const canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-hidden', 'true');
+    drawMemoryIcon(canvas, memory.cardOrder[i]);
+    button.appendChild(canvas);
+
+    if (!visible) {
+      button.classList.add('hidden');
     }
 
-    button.addEventListener('click', () => handleMemoryCellClick(i));
+    if (isMemoryCellInteractive(i)) {
+      button.addEventListener('click', () => handleMemoryCellClick(i));
+    } else if (!isMemoryEmptyCell(i)) {
+      button.disabled = true;
+    }
+
     gridEl.appendChild(button);
   }
 }
@@ -2875,8 +3493,12 @@ function stopMemoryTimer() {
 }
 
 function startMemoryTimer() {
-  stopMemoryTimer();
-  gameState.memory.timeLeft = getRoundDuration(30);
+  if (gameState.memory.timerId) {
+    clearInterval(gameState.memory.timerId);
+    gameState.memory.timerId = null;
+  }
+  const mode = getMemoryModeConfig();
+  gameState.memory.timeLeft = getRoundDuration(mode.playSec);
   updateMemoryTimerDisplay();
 
   gameState.memory.timerId = setInterval(() => {
@@ -2890,41 +3512,56 @@ function startMemoryTimer() {
   }, 1000);
 }
 
+function stopMemoryMemorizeTimer() {
+  if (gameState.memory.memorizeTimerId) {
+    clearInterval(gameState.memory.memorizeTimerId);
+    gameState.memory.memorizeTimerId = null;
+  }
+}
+
 function startMemoryMemorizePhase() {
   const { memory } = gameState;
+  const cellCount = getMemoryCellCount();
+  const mode = getMemoryModeConfig();
 
   memory.phase = 'memorize';
-  memory.revealedCells = Array(MEMORY_CELL_COUNT).fill(false);
-  memory.selectedCellIndex = null;
+  memory.selection = null;
+  memory.flashPair = null;
+  memory.inputLocked = false;
+  memory.matched = Array(cellCount).fill(false);
   memory.answered = false;
 
   setMemoryPhaseUI('memorize');
   hideMemoryFeedback();
   renderMemoryGrid();
-  taifExitGridMode();
   setTaifMotion('idle');
 
-  if (memory.memorizeTimerId) {
-    clearTimeout(memory.memorizeTimerId);
-  }
+  stopMemoryMemorizeTimer();
+  memory.memorizeTimeLeft = getRoundDuration(mode.memorizeSec);
+  updateMemoryMemorizeTimerDisplay();
 
-  memory.memorizeTimerId = setTimeout(() => {
-    memory.memorizeTimerId = null;
-    startMemoryPlayPhase();
-  }, getMemorizeDurationMs());
+  memory.memorizeTimerId = setInterval(() => {
+    memory.memorizeTimeLeft -= 1;
+    updateMemoryMemorizeTimerDisplay();
+
+    if (memory.memorizeTimeLeft <= 0) {
+      stopMemoryMemorizeTimer();
+      startMemoryPlayPhase();
+    }
+  }, 1000);
 }
 
 function startMemoryPlayPhase() {
   const { memory } = gameState;
 
-  stopTaifGridWalk();
+  stopMemoryMemorizeTimer();
   resetTaifActorPosition();
   setTaifLayout('compact');
 
   memory.phase = 'play';
-  memory.currentOrder = shuffleArray([...memory.correctOrder]);
-  memory.revealedCells = Array(MEMORY_CELL_COUNT).fill(false);
-  memory.selectedCellIndex = null;
+  memory.selection = null;
+  memory.flashPair = null;
+  memory.inputLocked = false;
   memory.questionStartTime = Date.now();
   memory.answered = false;
 
@@ -2933,37 +3570,85 @@ function startMemoryPlayPhase() {
   startMemoryTimer();
 }
 
+function isMemoryBoardComplete() {
+  const { memory } = gameState;
+  return memory.cardOrder.every((icon, index) => {
+    if (icon === MEMORY_EMPTY_CELL) return true;
+    return memory.matched[index];
+  });
+}
+
+function applyMemoryMismatchPenalty(indexA, indexB) {
+  const { memory } = gameState;
+
+  memory.inputLocked = true;
+  memory.flashPair = { a: indexA, b: indexB };
+  memory.selection = null;
+  renderMemoryGrid();
+
+  memory.timeLeft = Math.max(0, memory.timeLeft - MEMORY_MISMATCH_PENALTY_SEC);
+  updateMemoryTimerDisplay();
+  showMemoryPenaltyFlash();
+  playLoseSound();
+  if (typeof maybeTaifLoseQuip === 'function') maybeTaifLoseQuip();
+
+  if (memory.timeLeft <= 0) {
+    stopMemoryTimer();
+  }
+
+  if (memory.mismatchFlashId) {
+    clearTimeout(memory.mismatchFlashId);
+  }
+
+  memory.mismatchFlashId = setTimeout(() => {
+    memory.mismatchFlashId = null;
+    memory.flashPair = null;
+    memory.inputLocked = false;
+
+    if (memory.timeLeft <= 0) {
+      handleMemoryTimeout();
+      return;
+    }
+
+    renderMemoryGrid();
+  }, MEMORY_MISMATCH_FLASH_MS);
+}
+
 function handleMemoryCellClick(index) {
   const { memory } = gameState;
-  if (memory.phase !== 'play' || memory.answered) return;
+  if (!isMemoryCellInteractive(index)) return;
 
-  if (!memory.revealedCells[index]) {
-    memory.revealedCells[index] = true;
-    memory.selectedCellIndex = null;
+  if (memory.selection === null) {
+    memory.selection = index;
     renderMemoryGrid();
     return;
   }
 
-  if (memory.selectedCellIndex === null) {
-    memory.selectedCellIndex = index;
+  if (memory.selection === index) {
+    memory.selection = null;
     renderMemoryGrid();
     return;
   }
 
-  if (memory.selectedCellIndex === index) {
-    memory.selectedCellIndex = null;
+  const firstIndex = memory.selection;
+  const secondIndex = index;
+
+  if (memory.cardOrder[firstIndex] === memory.cardOrder[secondIndex]) {
+    memory.matched[firstIndex] = true;
+    memory.matched[secondIndex] = true;
+    memory.selection = null;
     renderMemoryGrid();
+
+    if (isMemoryBoardComplete()) {
+      const elapsedSeconds = (Date.now() - memory.questionStartTime) / 1000;
+      const { points } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.memory);
+      finishMemoryRoundAfterAnswer(true, points);
+      if (typeof taifQuipCorrect === 'function') taifQuipCorrect();
+    }
     return;
   }
 
-  const swapped = [...memory.currentOrder];
-  [swapped[memory.selectedCellIndex], swapped[index]] = [
-    swapped[index],
-    swapped[memory.selectedCellIndex]
-  ];
-  memory.currentOrder = swapped;
-  memory.selectedCellIndex = null;
-  renderMemoryGrid();
+  applyMemoryMismatchPenalty(firstIndex, secondIndex);
 }
 
 function advanceMemoryTurn() {
@@ -2985,11 +3670,6 @@ function finishMemoryRoundAfterAnswer(isCorrect, points) {
   memory.answered = true;
   stopMemoryTimer();
 
-  const checkBtn = document.getElementById('memory-check-btn');
-  if (checkBtn) {
-    checkBtn.disabled = true;
-  }
-
   if (isCorrect) {
     const teamName = getCurrentMemoryTeamName();
     addTeamScore(teamName, points);
@@ -3004,34 +3684,11 @@ function finishMemoryRoundAfterAnswer(isCorrect, points) {
   scheduleNextMemoryRound();
 }
 
-function handleMemoryCheck() {
-  if (gameState.memory.answered || gameState.memory.phase !== 'play') return;
-
-  const { memory } = gameState;
-  const isCorrect = memory.currentOrder.every(
-    (value, index) => value === memory.correctOrder[index]
-  );
-  const elapsedSeconds = (Date.now() - memory.questionStartTime) / 1000;
-
-  if (isCorrect) {
-    const { points } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.memory);
-    finishMemoryRoundAfterAnswer(true, points);
-    return;
-  }
-
-  showMemoryFeedback('خطأ! حاول مرة أخرى', false);
-}
-
 function handleMemoryTimeout() {
   if (gameState.memory.answered || gameState.memory.phase !== 'play') return;
 
   gameState.memory.answered = true;
   stopMemoryTimer();
-
-  const checkBtn = document.getElementById('memory-check-btn');
-  if (checkBtn) {
-    checkBtn.disabled = true;
-  }
 
   showMemoryFeedback('انتهى الوقت!', false);
   if (typeof taifQuipTimeout === 'function') taifQuipTimeout();
@@ -3057,11 +3714,16 @@ function showNextMemoryRound() {
   }
 
   const { memory } = gameState;
+  const mode = getMemoryModeConfig();
+  const cellCount = mode.gridSize * mode.gridSize;
+
   memory.currentTeamIndex = teamIndex;
-  memory.correctOrder = getNextMemoryRoundOrder();
-  memory.currentOrder = [...memory.correctOrder];
-  memory.revealedCells = Array(MEMORY_CELL_COUNT).fill(false);
-  memory.selectedCellIndex = null;
+  memory.gridSize = mode.gridSize;
+  memory.cardOrder = buildMemoryRoundLayout();
+  memory.matched = Array(cellCount).fill(false);
+  memory.selection = null;
+  memory.flashPair = null;
+  memory.inputLocked = false;
   memory.phase = 'idle';
   memory.answered = false;
 
@@ -3082,25 +3744,103 @@ function showNextMemoryRound() {
   startMemoryMemorizePhase();
 }
 
-const CREATIVE_CANVAS_WIDTH = 400;
-const CREATIVE_CANVAS_HEIGHT = 280;
+const CREATIVE_CANVAS_WIDTH = 480;
+const CREATIVE_CANVAS_HEIGHT = 336;
 
 const CREATIVE_CHALLENGES = [
-  { prompt: 'ارسم شجرة جميلة', type: 'draw' },
-  { prompt: 'اكتب قصة قصيرة (3 جمل) عن رحلة إلى الفضاء', type: 'text' },
-  { prompt: 'ارسم منزلاً مع حديقة', type: 'draw' },
-  { prompt: 'اكتب وصفاً ليومك المثالي', type: 'text' },
-  { prompt: 'ارسم وجهاً مبتسماً', type: 'draw' },
-  { prompt: 'اكتب قصيدة من بيتين عن الصداقة', type: 'text' },
-  { prompt: 'ارسم سيارة', type: 'draw' },
-  { prompt: 'اكتب نصيحة مفيدة للحياة', type: 'text' },
-  { prompt: 'ارسم شمساً وسحابة', type: 'draw' },
-  { prompt: 'اكتب عن حيوانك المفضل ولماذا', type: 'text' },
-  { prompt: 'ارسم قلباً وزهرة', type: 'draw' },
-  { prompt: 'اكتب قائمة بثلاثة أشياء تشكر الله عليها', type: 'text' },
-  { prompt: 'ارسم سفينة في البحر', type: 'draw' },
-  { prompt: 'اكتب حواراً قصيراً بين شخصين', type: 'text' }
+  { prompt: 'ارسم شجرة', target: 'شجرة' },
+  { prompt: 'ارسم سيارة', target: 'سيارة' },
+  { prompt: 'ارسم منزلاً', target: 'منزل' },
+  { prompt: 'ارسم قطة', target: 'قطة' },
+  { prompt: 'ارسم طائرة', target: 'طائرة' },
+  { prompt: 'ارسم زهرة', target: 'زهرة' },
+  { prompt: 'ارسم سمكة', target: 'سمكة' },
+  { prompt: 'ارسم شمساً', target: 'شمس' },
+  { prompt: 'ارسم سفينة', target: 'سفينة' },
+  { prompt: 'ارسم وجهاً مبتسماً', target: 'وجه مبتسم' },
+  { prompt: 'ارسم نجمة', target: 'نجمة' },
+  { prompt: 'ارسم فيلاً', target: 'فيل' },
+  { prompt: 'ارسم دراجة هوائية', target: 'دراجة هوائية' },
+  { prompt: 'ارسم ساعة', target: 'ساعة' },
+  { prompt: 'ارسم فنجان قهوة', target: 'فنجان قهوة' },
+  { prompt: 'ارسم طائراً', target: 'طائر' },
+  { prompt: 'ارسم قلباً', target: 'قلب' },
+  { prompt: 'ارسم كلباً', target: 'كلب' },
+  { prompt: 'ارسم بطة', target: 'بطة' },
+  { prompt: 'ارسم أرنباً', target: 'أرنب' },
+  { prompt: 'ارسم تفاحة', target: 'تفاحة' },
+  { prompt: 'ارسم موزة', target: 'موزة' },
+  { prompt: 'ارسم مظلة', target: 'مظلة' },
+  { prompt: 'ارسم بالوناً', target: 'بالون' },
+  { prompt: 'ارسم مفتاحاً', target: 'مفتاح' },
+  { prompt: 'ارسم كوباً', target: 'كوب' },
+  { prompt: 'ارسم هلالاً', target: 'هلال' },
+  { prompt: 'ارسم سحابة', target: 'سحابة' },
+  { prompt: 'ارسم علماً', target: 'علم' },
+  { prompt: 'ارسم كرة', target: 'كرة' },
+  { prompt: 'ارسم نظارة', target: 'نظارة' },
+  { prompt: 'ارسم جبلاً', target: 'جبل' },
+  { prompt: 'ارسم صاروخاً', target: 'صاروخ' },
+  { prompt: 'ارسم فراشة', target: 'فراشة' },
+  { prompt: 'ارسم آيس كريم', target: 'آيس كريم' },
+  { prompt: 'ارسم جزرة', target: 'جزرة' },
+  { prompt: 'ارسم بيتاً للطيور', target: 'بيت طيور' },
+  { prompt: 'ارسم قبعة', target: 'قبعة' },
+  { prompt: 'ارسم شمعة', target: 'شمعة' }
 ];
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text == null ? '' : String(text);
+  return div.innerHTML;
+}
+
+// تقييم الرسمة عبر OpenRouter (واجهة متوافقة مع OpenAI، تدعم الرؤية).
+// ⚠️ هذا المفتاح مكشوف لأي شخص يفتح الموقع المنشور — يُفضّل تدويره أو استخدام خادم وسيط.
+const OPENROUTER_DEFAULT_KEY =
+  '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';
+// نموذج رؤية على OpenRouter — أذكى من lite لتعليقات مترابطة، وما زال رخيصاً.
+// بدائل: google/gemini-2.5-flash-lite (أرخص)، openai/gpt-4o-mini (مدفوع).
+const CREATIVE_AI_MODEL = 'google/gemini-2.5-flash';
+// نموذج توليد الصور لتحويل الرسمة إلى نسخة واقعية بسيطة.
+const CREATIVE_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
+const CREATIVE_API_KEY_STORAGE = 'taif_openrouter_api_key';
+
+// ألوان التلوين الأساسية (متناسقة مع ألوان واجهة التطبيق).
+const CREATIVE_COLORS = [
+  { name: 'أسود', value: '#1a1a1a' },
+  { name: 'أحمر', value: '#ff4757' },
+  { name: 'برتقالي', value: '#ff9f1a' },
+  { name: 'أصفر', value: '#ffd32a' },
+  { name: 'أخضر', value: '#2ed573' },
+  { name: 'أزرق', value: '#5b9fed' },
+  { name: 'بنفسجي', value: '#a55eea' },
+  { name: 'وردي', value: '#e84393' },
+  { name: 'بني', value: '#8a5a2b' }
+];
+const CREATIVE_DEFAULT_COLOR = CREATIVE_COLORS[0].value;
+
+function getCreativeApiKey() {
+  try {
+    const stored = (localStorage.getItem(CREATIVE_API_KEY_STORAGE) || '').trim();
+    if (stored) return stored;
+  } catch (error) {
+    /* تجاهل: قد يكون التخزين المحلي معطّلاً */
+  }
+  return OPENROUTER_DEFAULT_KEY;
+}
+
+function setCreativeApiKey(key) {
+  try {
+    if (key) {
+      localStorage.setItem(CREATIVE_API_KEY_STORAGE, key.trim());
+    } else {
+      localStorage.removeItem(CREATIVE_API_KEY_STORAGE);
+    }
+  } catch (error) {
+    /* تجاهل: قد يكون التخزين المحلي معطّلاً */
+  }
+}
 
 function clearCreativeTimers() {
   const { creative } = gameState;
@@ -3122,10 +3862,6 @@ function isCreativeComplete() {
 
 function getCurrentCreativeTeamName() {
   return gameState.teams[gameState.creative.currentTeamIndex];
-}
-
-function getCreativeEvaluatorTeamName() {
-  return gameState.teams[gameState.creative.evaluatorTeamIndex];
 }
 
 function findActiveCreativeTeamIndex() {
@@ -3205,7 +3941,7 @@ function initCreativeDrawCanvas() {
   canvas.height = CREATIVE_CANVAS_HEIGHT;
 
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#16213e';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, CREATIVE_CANVAS_WIDTH, CREATIVE_CANVAS_HEIGHT);
 
   const getCanvasPoint = (event) => {
@@ -3218,31 +3954,52 @@ function initCreativeDrawCanvas() {
     };
   };
 
-  canvas.addEventListener('mousedown', (event) => {
+  canvas.addEventListener('pointerdown', (event) => {
     if (gameState.creative.phase !== 'create') return;
-    gameState.creative.isDrawing = true;
     const { x, y } = getCanvasPoint(event);
+    const tool = gameState.creative.tool;
+
+    if (tool === 'fill') {
+      saveCreativeUndoState();
+      floodFillCanvas(Math.round(x), Math.round(y), gameState.creative.brushColor || CREATIVE_DEFAULT_COLOR);
+      event.preventDefault();
+      return;
+    }
+
+    saveCreativeUndoState();
+    gameState.creative.isDrawing = true;
+    if (canvas.setPointerCapture) {
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch (error) {
+        /* تجاهل: بعض المتصفحات قد ترفض الالتقاط */
+      }
+    }
     ctx.beginPath();
     ctx.moveTo(x, y);
+    event.preventDefault();
   });
 
-  canvas.addEventListener('mousemove', (event) => {
+  canvas.addEventListener('pointermove', (event) => {
     if (!gameState.creative.isDrawing || gameState.creative.phase !== 'create') return;
     const { x, y } = getCanvasPoint(event);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
+    const tool = gameState.creative.tool;
+    ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : (gameState.creative.brushColor || CREATIVE_DEFAULT_COLOR);
+    ctx.lineWidth = gameState.creative.brushSize || 6;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineTo(x, y);
     ctx.stroke();
+    event.preventDefault();
   });
 
   const stopDrawing = () => {
     gameState.creative.isDrawing = false;
   };
 
-  canvas.addEventListener('mouseup', stopDrawing);
-  canvas.addEventListener('mouseleave', stopDrawing);
+  canvas.addEventListener('pointerup', stopDrawing);
+  canvas.addEventListener('pointercancel', stopDrawing);
+  canvas.addEventListener('pointerleave', stopDrawing);
 
   gameState.creative.drawListenersBound = true;
 }
@@ -3252,45 +4009,142 @@ function clearCreativeCanvas() {
   if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#16213e';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function renderCreativePalette() {
+  const container = document.getElementById('creative-palette');
+  if (!container || container.childElementCount) return;
+
+  CREATIVE_COLORS.forEach((color, index) => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'creative-swatch';
+    swatch.style.backgroundColor = color.value;
+    swatch.title = color.name;
+    swatch.setAttribute('aria-label', color.name);
+    if (index === 0) swatch.classList.add('active');
+    swatch.addEventListener('click', () => {
+      gameState.creative.brushColor = color.value;
+      container.querySelectorAll('.creative-swatch').forEach((el) => {
+        el.classList.toggle('active', el === swatch);
+      });
+      if (gameState.creative.tool === 'eraser') setCreativeActiveTool('brush');
+    });
+    container.appendChild(swatch);
+  });
+}
+
+function saveCreativeUndoState() {
+  const canvas = getCreativeDrawCanvas();
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  gameState.creative.undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  gameState.creative.redoStack = [];
+  if (gameState.creative.undoStack.length > 30) gameState.creative.undoStack.shift();
+}
+
+function creativeUndo() {
+  const canvas = getCreativeDrawCanvas();
+  if (!canvas || !gameState.creative.undoStack.length) return;
+  const ctx = canvas.getContext('2d');
+  gameState.creative.redoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  ctx.putImageData(gameState.creative.undoStack.pop(), 0, 0);
+}
+
+function creativeRedo() {
+  const canvas = getCreativeDrawCanvas();
+  if (!canvas || !gameState.creative.redoStack.length) return;
+  const ctx = canvas.getContext('2d');
+  gameState.creative.undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  ctx.putImageData(gameState.creative.redoStack.pop(), 0, 0);
+}
+
+function hexToRGB(hex) {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 0, g: 0, b: 0 };
+}
+
+function floodFillCanvas(startX, startY, fillColor) {
+  const canvas = getCreativeDrawCanvas();
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const fill = hexToRGB(fillColor);
+  const si = (startY * w + startX) * 4;
+  const tR = d[si], tG = d[si + 1], tB = d[si + 2], tA = d[si + 3];
+  if (tR === fill.r && tG === fill.g && tB === fill.b) return;
+  const tol = 32;
+  const stack = [startX, startY];
+  const seen = new Uint8Array(w * h);
+  while (stack.length) {
+    const cy = stack.pop(), cx = stack.pop();
+    const pi = cy * w + cx;
+    if (seen[pi]) continue;
+    const di = pi * 4;
+    if (Math.abs(d[di] - tR) > tol || Math.abs(d[di + 1] - tG) > tol || Math.abs(d[di + 2] - tB) > tol || Math.abs(d[di + 3] - tA) > tol) continue;
+    seen[pi] = 1;
+    d[di] = fill.r; d[di + 1] = fill.g; d[di + 2] = fill.b; d[di + 3] = 255;
+    if (cx > 0) stack.push(cx - 1, cy);
+    if (cx < w - 1) stack.push(cx + 1, cy);
+    if (cy > 0) stack.push(cx, cy - 1);
+    if (cy < h - 1) stack.push(cx, cy + 1);
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function setCreativeActiveTool(toolName) {
+  gameState.creative.tool = toolName;
+  ['brush', 'eraser', 'fill'].forEach(t => {
+    const btn = document.getElementById('creative-tool-' + t);
+    if (btn) btn.classList.toggle('active', t === toolName);
+  });
+}
+
 function setCreativeCreateInputsEnabled(enabled) {
-  const inputEl = document.getElementById('creative-answer-input');
   const doneBtn = document.getElementById('creative-done-btn');
   const clearBtn = document.getElementById('creative-clear-btn');
   const canvas = getCreativeDrawCanvas();
+  const toolbar = document.getElementById('creative-toolbar');
 
-  if (inputEl) inputEl.disabled = !enabled;
   if (doneBtn) doneBtn.disabled = !enabled;
   if (clearBtn) clearBtn.disabled = !enabled;
   if (canvas) {
     canvas.style.pointerEvents = enabled ? 'auto' : 'none';
   }
+  if (toolbar) {
+    toolbar.querySelectorAll('button').forEach(btn => { btn.disabled = !enabled; });
+  }
 }
 
 function updateCreativeChallengeUI(challenge) {
   const challengeEl = document.getElementById('creative-challenge');
-  const inputEl = document.getElementById('creative-answer-input');
-  const drawWrap = document.getElementById('creative-draw-wrap');
 
   if (challengeEl) {
     challengeEl.textContent = challenge.prompt;
   }
 
-  const isDraw = challenge.type === 'draw';
-  if (inputEl) {
-    inputEl.hidden = isDraw;
-    inputEl.value = '';
+  initCreativeDrawCanvas();
+  clearCreativeCanvas();
+  renderCreativePalette();
+  gameState.creative.brushColor = CREATIVE_DEFAULT_COLOR;
+  gameState.creative.tool = 'brush';
+  gameState.creative.brushSize = 6;
+  gameState.creative.undoStack = [];
+  gameState.creative.redoStack = [];
+  const palette = document.getElementById('creative-palette');
+  if (palette) {
+    palette.querySelectorAll('.creative-swatch').forEach((el, i) => {
+      el.classList.toggle('active', i === 0);
+    });
   }
-  if (drawWrap) {
-    drawWrap.hidden = !isDraw;
-  }
-  if (isDraw) {
-    initCreativeDrawCanvas();
-    clearCreativeCanvas();
-  }
+  setCreativeActiveTool('brush');
+  document.querySelectorAll('.creative-size-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === '6');
+  });
 }
 
 function stopCreativeTimer() {
@@ -3303,7 +4157,8 @@ function stopCreativeTimer() {
 
 function startCreativeTimer() {
   stopCreativeTimer();
-  gameState.creative.timeLeft = getRoundDuration(60);
+  gameState.creative.roundDuration = getRoundDuration(75);
+  gameState.creative.timeLeft = gameState.creative.roundDuration;
   updateCreativeTimerDisplay();
 
   gameState.creative.timerId = setInterval(() => {
@@ -3338,12 +4193,6 @@ function setCreativePhaseUI(phase) {
 
 function captureCreativeAnswer() {
   const { creative } = gameState;
-  if (creative.currentChallenge?.type === 'text') {
-    const inputEl = document.getElementById('creative-answer-input');
-    creative.answerText = inputEl?.value.trim() || '';
-    return;
-  }
-
   const canvas = getCreativeDrawCanvas();
   creative.answerText = canvas ? canvas.toDataURL('image/png') : '';
 }
@@ -3355,45 +4204,339 @@ function renderCreativeAnswerPreview() {
   const { creative } = gameState;
   previewEl.innerHTML = '';
 
-  if (creative.currentChallenge?.type === 'draw') {
-    const img = document.createElement('img');
-    img.src = creative.answerText || '';
-    img.alt = 'رسم الفريق';
-    previewEl.appendChild(img);
+  const img = document.createElement('img');
+  img.src = creative.answerText || '';
+  img.alt = 'رسم الفريق';
+  previewEl.appendChild(img);
+}
+
+function setCreativeEvalResult(html) {
+  const resultEl = document.getElementById('creative-eval-result');
+  if (resultEl) {
+    resultEl.innerHTML = html;
+  }
+}
+
+function showCreativeKeySetup(show) {
+  const setupEl = document.getElementById('creative-key-setup');
+  if (setupEl) {
+    setupEl.hidden = !show;
+  }
+}
+
+// يحوّل عدد البكسلات المرسومة + الوقت إلى درجة تقريبية حين لا يتوفّر مفتاح API.
+function heuristicCreativeScore(canvas, timeSpent, totalTime) {
+  let detailRatio = 0;
+  try {
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let drawn = 0;
+    // الخلفية بيضاء (255,255,255)؛ نعدّ أي بكسل ملوّن/مرسوم.
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if ((255 - r) + (255 - g) + (255 - b) > 40) {
+        drawn += 1;
+      }
+    }
+    const totalPixels = data.length / 4;
+    detailRatio = totalPixels > 0 ? drawn / totalPixels : 0;
+  } catch (error) {
+    detailRatio = 0;
+  }
+
+  // التفاصيل: نعتبر تغطية ~9% رسمة غنية (أسهل). الوقت: حصّة أصغر.
+  const detailScore = Math.min(1, detailRatio / 0.09);
+  const timeScore = totalTime > 0 ? Math.min(1, timeSpent / totalTime) : 0;
+  const combined = detailScore * 0.75 + timeScore * 0.25;
+  const score = Math.round(combined * 6) + 4; // 4..10 (أسهل)
+  return Math.max(1, Math.min(10, score));
+}
+
+// يستخرج {score, comment} من نص الرد ولو احتوى على زوائد حول JSON.
+function parseCreativeScore(text) {
+  if (!text) return null;
+  let raw = text.trim();
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) raw = match[0];
+  try {
+    const parsed = JSON.parse(raw);
+    let score = Number(parsed.score);
+    if (!Number.isFinite(score)) return null;
+    score = Math.max(1, Math.min(10, Math.round(score)));
+    const comment = typeof parsed.comment === 'string' ? parsed.comment.trim() : '';
+    return { score, comment };
+  } catch (error) {
+    return null;
+  }
+}
+
+async function evaluateDrawingWithAI(target, imageDataUrl, timeSpent, totalTime) {
+  const apiKey = getCreativeApiKey();
+  if (!apiKey) throw new Error('no-key');
+  if (!imageDataUrl || imageDataUrl.indexOf(',') === -1) throw new Error('no-image');
+
+  // طيف تعلّق برأيها العفوي على الرسمة (لا قالب ثابت)، بشرط الترابط والإيجاز.
+  const systemPrompt =
+    'أنتِ "طيف"، مقدّمة مسابقات بلهجة خليجية خفيفة الظل. ' +
+    'تأمّلي الرسمة وعلّقي عليها برأيكِ أنتِ بشكل عفوي وطبيعي وساخر بلطف — انطباعكِ الصادق عمّا تشاهدينه. ' +
+    'نوّعي في تعليقاتكِ ولا تكرري نفس الأسلوب أو القالب؛ عبّري بطريقتكِ الخاصة كل مرة. ' +
+    'الشرط الوحيد: يكون التعليق عن هذه الرسمة بالذات ومفهوماً (لا كلمات أو تشبيهات عشوائية لا علاقة لها بما تشاهدينه). ' +
+    'خليه قصيراً وبسيطاً (جملة واحدة).';
+
+  const userText =
+    `طُلب من الفريق أن يرسم: "${target}". قضى ${timeSpent} ثانية من أصل ${totalTime} ثانية. ` +
+    `قيّمي الرسمة من 1 إلى 10، وكوني كريمة وسهلة في الدرجات: أي محاولة فيها شبه ولو بسيط بـ "${target}" تستحق 6 أو أكثر، والرسمة الجيدة 8 إلى 10. ` +
+    `قد يكون الفريق لوّن الرسمة بالألوان؛ فإذا استخدم ألواناً مناسبة وجميلة اعتبري ذلك جهداً إضافياً يرفع الدرجة قليلاً. ` +
+    `لا تعطي أقل من 5 إلا إذا كانت الورقة فارغة تماماً أو مجرد خربشة عشوائية بلا أي معنى. ` +
+    `اكتبي تعليقكِ الخاص بعفوية عمّا تشاهدينه في الرسمة (بما فيها الألوان) وعلاقته بـ "${target}" — قصير وبسيط ومترابط، وبأسلوب مختلف كل مرة. ` +
+    `أعيدي ردّكِ بصيغة JSON فقط دون أي نص خارجه: {"score": رقم صحيح من 1 إلى 10, "comment": "تعليقكِ العفوي"}`;
+
+  const body = {
+    model: CREATIVE_AI_MODEL,
+    max_tokens: 400,
+    temperature: 0.85,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userText },
+          { type: 'image_url', image_url: { url: imageDataUrl } }
+        ]
+      }
+    ]
+  };
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: 'Bearer ' + apiKey,
+      'X-Title': 'Taif Challenge'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error('api-' + response.status);
+  }
+
+  const data = await response.json();
+  const text = data && data.choices && data.choices[0]
+    ? (data.choices[0].message && data.choices[0].message.content) || ''
+    : '';
+  const parsed = parseCreativeScore(text);
+  if (!parsed) throw new Error('bad-response');
+  return parsed;
+}
+
+// يحوّل رسمة الفريق إلى صورة واقعية بسيطة عبر نموذج توليد الصور، ويعيد رابط data URL.
+async function generateRealisticImage(target, imageDataUrl) {
+  const apiKey = getCreativeApiKey();
+  if (!apiKey) throw new Error('no-key');
+  if (!imageDataUrl || imageDataUrl.indexOf(',') === -1) throw new Error('no-image');
+
+  const body = {
+    model: CREATIVE_IMAGE_MODEL,
+    modalities: ['image', 'text'],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              `هذه رسمة يدوية بسيطة لـ "${target}". حوّلها إلى صورة واقعية بسيطة وواضحة لنفس الشيء، ` +
+              `مع المحافظة على نفس التكوين والوضعية والألوان قدر الإمكان. أبقها بسيطة وغير مزدحمة.`
+          },
+          { type: 'image_url', image_url: { url: imageDataUrl } }
+        ]
+      }
+    ]
+  };
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: 'Bearer ' + apiKey,
+      'X-Title': 'Taif Challenge'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error('img-' + response.status);
+  }
+
+  const data = await response.json();
+  const message = data && data.choices && data.choices[0] && data.choices[0].message;
+  const images = message && message.images;
+  const imageUrl = images && images[0] && images[0].image_url && images[0].image_url.url;
+  if (!imageUrl) throw new Error('no-image-out');
+  return imageUrl;
+}
+
+// يطلب النسخة الواقعية ويعرضها في الصندوق المجاور للرسمة.
+function runCreativeRealistic() {
+  const { creative } = gameState;
+  const box = document.getElementById('creative-realistic-box');
+  if (!box) return;
+
+  creative.realisticToken += 1;
+  const token = creative.realisticToken;
+  const target = creative.currentChallenge?.target || creative.currentChallenge?.prompt || '';
+  const sourceImage = creative.answerText;
+
+  box.innerHTML = '<p class="creative-realistic-status">طيف ترسمها بالواقع…</p>';
+
+  generateRealisticImage(target, sourceImage)
+    .then((url) => {
+      if (creative.realisticToken !== token) return; // جولة جديدة بدأت
+      box.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = 'نسخة واقعية للرسمة';
+      box.appendChild(img);
+    })
+    .catch(() => {
+      if (creative.realisticToken !== token) return;
+      box.innerHTML = '<p class="creative-realistic-status">تعذّر توليد النسخة الواقعية.</p>';
+    });
+}
+
+// يعتمد الدرجة النهائية، يمنح النقاط، ويعرض حكم طيف ثم ينتقل للجولة التالية.
+function finalizeCreativeScore(score, comment, fromAI) {
+  const { creative } = gameState;
+  if (creative.phase !== 'rate' || creative.rated) return;
+  creative.rated = true;
+
+  const creatorName = getCurrentCreativeTeamName();
+  const awardedScore = score * (isSurpriseRound() ? 2 : 1);
+  addTeamScore(creatorName, awardedScore);
+
+  const verdict = comment && comment.length
+    ? comment
+    : (fromAI ? 'تقييم طيف جاهز!' : 'تقييم تقريبي (بدون مفتاح).');
+  const badge = fromAI ? 'تقييم طيف الذكي' : 'تقييم تقريبي';
+  setCreativeEvalResult(
+    `<div class="creative-eval-score">${score} <span>/ 10</span></div>` +
+    `<p class="creative-eval-comment">${escapeHtml(verdict)}</p>` +
+    `<p class="creative-eval-badge">${badge}</p>`
+  );
+
+  if (typeof setTaifSpeech === 'function') {
+    setTaifSpeech(verdict);
+  }
+  if (typeof setTaifMood === 'function') {
+    setTaifMood(score >= 6 ? 'celebrate' : 'mock');
+  }
+
+  showCreativeFeedback(`+${awardedScore} نقطة لفريق ${creatorName}`, true);
+  updateCreativeScoresDisplay();
+  showCreativeNextButton(true);
+  advanceCreativeTurn();
+  scheduleNextCreativeRound();
+}
+
+async function runCreativeEvaluation() {
+  const { creative } = gameState;
+  if (creative.evaluating || creative.rated) return;
+
+  if (!getCreativeApiKey()) {
+    setCreativeEvalResult('<p class="creative-eval-status">بحاجة لمفتاح API لتقييم طيف الذكي…</p>');
+    showCreativeKeySetup(true);
     return;
   }
 
-  previewEl.textContent = creative.answerText || '(لا توجد إجابة)';
+  showCreativeKeySetup(false);
+  creative.evaluating = true;
+  setCreativeEvalResult('<p class="creative-eval-status">طيف يتأمّل الرسمة…</p>');
+  if (typeof setTaifSpeech === 'function') {
+    setTaifSpeech('خلّوني أشوف هالتحفة الفنية…');
+  }
+
+  const target = creative.currentChallenge?.target || creative.currentChallenge?.prompt || '';
+  try {
+    const { score, comment } = await evaluateDrawingWithAI(
+      target,
+      creative.answerText,
+      creative.timeSpent,
+      creative.roundDuration
+    );
+    creative.evaluating = false;
+    if (creative.phase !== 'rate') return;
+    finalizeCreativeScore(score, comment, true);
+  } catch (error) {
+    creative.evaluating = false;
+    if (creative.phase !== 'rate') return;
+    // فشل الاتصال أو الرد → تقييم تقريبي احتياطي حتى لا تتوقف اللعبة.
+    const canvas = getCreativeDrawCanvas();
+    const fallbackScore = canvas
+      ? heuristicCreativeScore(canvas, creative.timeSpent, creative.roundDuration)
+      : 5;
+    const note = error && error.message === 'no-key'
+      ? 'بدون مفتاح — تقييم تقريبي.'
+      : 'تعذّر تقييم طيف الذكي — تقييم تقريبي.';
+    finalizeCreativeScore(fallbackScore, note, false);
+  }
 }
 
-function renderCreativeRatingButtons() {
-  const container = document.getElementById('creative-rating-buttons');
-  if (!container) return;
+function handleCreativeKeySave() {
+  const inputEl = document.getElementById('creative-key-input');
+  const key = inputEl ? inputEl.value.trim() : '';
+  if (!key) return;
+  setCreativeApiKey(key);
+  if (inputEl) inputEl.value = '';
+  showCreativeKeySetup(false);
+  runCreativeEvaluation();
+}
 
-  container.innerHTML = '';
-
-  for (let score = 1; score <= 10; score += 1) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'creative-rating-btn';
-    button.textContent = String(score);
-    button.addEventListener('click', () => handleCreativeRating(score));
-    container.appendChild(button);
-  }
+function handleCreativeKeySkip() {
+  const { creative } = gameState;
+  if (creative.phase !== 'rate' || creative.rated) return;
+  showCreativeKeySetup(false);
+  const canvas = getCreativeDrawCanvas();
+  const score = canvas
+    ? heuristicCreativeScore(canvas, creative.timeSpent, creative.roundDuration)
+    : 5;
+  finalizeCreativeScore(score, 'تقييم تقريبي (بدون مفتاح).', false);
 }
 
 function startCreativeRatePhase() {
   const { creative } = gameState;
   if (creative.phase === 'rate') return;
 
+  creative.timeSpent = Math.max(0, creative.roundDuration - Math.max(0, creative.timeLeft));
   creative.phase = 'rate';
+  creative.rated = false;
+  creative.evaluating = false;
   stopCreativeTimer();
   captureCreativeAnswer();
   setCreativeCreateInputsEnabled(false);
   setCreativePhaseUI('rate');
   renderCreativeAnswerPreview();
-  renderCreativeRatingButtons();
-  creative.rated = false;
+  showCreativeKeySetup(false);
+  showCreativeNextButton(false);
+  runCreativeEvaluation();
+  runCreativeRealistic();
+}
+
+function showCreativeNextButton(show) {
+  const btn = document.getElementById('creative-next-btn');
+  if (btn) btn.hidden = !show;
+}
+
+function handleCreativeNext() {
+  const { creative } = gameState;
+  if (creative.phase !== 'rate' || !creative.rated) return;
+  if (creative.feedbackTimeoutId) {
+    clearTimeout(creative.feedbackTimeoutId);
+    creative.feedbackTimeoutId = null;
+  }
+  showNextCreativeRound();
 }
 
 function handleCreativeDone() {
@@ -3415,30 +4558,11 @@ function advanceCreativeTurn() {
 }
 
 function scheduleNextCreativeRound() {
+  // مهلة أطول لإتاحة الوقت لظهور النسخة الواقعية وقراءة الحكم (مع زر "التالي" للتحكم اليدوي).
   gameState.creative.feedbackTimeoutId = setTimeout(() => {
     gameState.creative.feedbackTimeoutId = null;
     showNextCreativeRound();
-  }, 1500);
-}
-
-function handleCreativeRating(score) {
-  const { creative } = gameState;
-  if (creative.phase !== 'rate' || creative.rated) return;
-
-  creative.rated = true;
-  const creatorName = getCurrentCreativeTeamName();
-  const awardedScore = score * (isSurpriseRound() ? 2 : 1);
-  addTeamScore(creatorName, awardedScore);
-
-  const ratingButtons = document.querySelectorAll('.creative-rating-btn');
-  ratingButtons.forEach((btn) => {
-    btn.disabled = true;
-  });
-
-  showCreativeFeedback(`+${awardedScore} نقطة لفريق ${creatorName}`, true);
-  updateCreativeScoresDisplay();
-  advanceCreativeTurn();
-  scheduleNextCreativeRound();
+  }, 16000);
 }
 
 function startCreativeCreatePhase() {
@@ -3447,7 +4571,11 @@ function startCreativeCreatePhase() {
   creative.phase = 'create';
   creative.answerText = '';
   creative.rated = false;
+  creative.evaluating = false;
+  creative.timeSpent = 0;
   hideCreativeFeedback();
+  setCreativeEvalResult('');
+  showCreativeKeySetup(false);
   setCreativePhaseUI('create');
   updateCreativeChallengeUI(creative.currentChallenge);
   setCreativeCreateInputsEnabled(true);
@@ -3469,24 +4597,18 @@ function showNextCreativeRound() {
     return;
   }
 
-  const { creative, teams } = gameState;
+  const { creative } = gameState;
   creative.currentTeamIndex = teamIndex;
-  creative.evaluatorTeamIndex = (teamIndex + 1) % teams.length;
   creative.currentChallenge = getNextCreativeChallenge();
   creative.phase = 'idle';
 
   const creatorLabelEl = document.getElementById('creative-creator-label');
-  const evaluatorLabelEl = document.getElementById('creative-evaluator-label');
   const progressEl = document.getElementById('creative-progress');
   const creatorName = getCurrentCreativeTeamName();
-  const evaluatorName = getCreativeEvaluatorTeamName();
   const roundCount = creative.teamRoundCounts[creatorName];
 
   if (creatorLabelEl) {
-    setColoredTeamLabel(creatorLabelEl, 'فريق منشئ: ', creatorName);
-  }
-  if (evaluatorLabelEl) {
-    setColoredTeamLabel(evaluatorLabelEl, 'فريق المقيّم: ', evaluatorName);
+    setColoredTeamLabel(creatorLabelEl, 'دور فريق: ', creatorName);
   }
   if (progressEl) {
     progressEl.textContent = `التحدي ${roundCount + 1} من ${creative.roundsPerTeam}`;
@@ -3496,11 +4618,45 @@ function showNextCreativeRound() {
   startCreativeCreatePhase();
 }
 
-const PASSWORD_WORDS = [
-  'شمس', 'قمر', 'سيارة', 'منزل', 'شجرة', 'كتاب', 'قطة', 'كلب',
-  'طائرة', 'سفينة', 'وردة', 'تفاحة', 'جبل', 'بحر', 'نجمة', 'سحابة',
-  'مفتاح', 'ساعة', 'كرة', 'قلم', 'كوب', 'مظلة', 'فراشة', 'سمكة',
-  'جسر', 'قلعة', 'صحراء', 'مدينة', 'حديقة', 'مطبخ'
+// عبارات كلمة السر: كل عبارة لها تصنيف يظهر لفريق الوصف مع العبارة نفسها.
+const PASSWORD_PHRASES = [
+  // أمثال خليجية شعبية
+  { answer: 'اللي ما يعرف الصقر يشويه', category: 'مثل خليجي شعبي' },
+  { answer: 'يا ما تحت السواهي دواهي', category: 'مثل خليجي شعبي' },
+  { answer: 'الحركة بركة', category: 'مثل خليجي شعبي' },
+  { answer: 'عصفور باليد ولا عشرة على الشجرة', category: 'مثل خليجي شعبي' },
+  { answer: 'اللي على راسه بطحة يحسّس عليها', category: 'مثل خليجي شعبي' },
+  { answer: 'باب النجار مخلوع', category: 'مثل خليجي شعبي' },
+  { answer: 'الصيت ولا الغنى', category: 'مثل خليجي شعبي' },
+  { answer: 'اللي ما يطول العنب حامض عنه يقول', category: 'مثل خليجي شعبي' },
+
+  // أغاني عربية معروفة
+  { answer: 'مقادير', category: 'أغنية سعودية لطلال مداح' },
+  { answer: 'الرسايل', category: 'أغنية سعودية لمحمد عبده' },
+  { answer: 'إنت عمري', category: 'أغنية مصرية لأم كلثوم' },
+  { answer: 'ألف ليلة وليلة', category: 'أغنية مصرية لأم كلثوم' },
+  { answer: 'قارئة الفنجان', category: 'أغنية مصرية لعبدالحليم حافظ' },
+  { answer: 'بشرة خير', category: 'أغنية إماراتية لحسين الجسمي' },
+  { answer: 'نسم علينا الهوى', category: 'أغنية لبنانية لفيروز' },
+  { answer: 'حدي نظر', category: 'أغنية سعودية لخالد عبد الرحمن' },
+
+  // مسلسلات عربية مشهورة
+  { answer: 'طاش ما طاش', category: 'مسلسل كوميدي سعودي' },
+  { answer: 'باب الحارة', category: 'مسلسل سوري شامي' },
+  { answer: 'خالتي قماشة', category: 'مسلسل كويتي' },
+  { answer: 'بقعة ضوء', category: 'مسلسل كوميدي سوري' },
+  { answer: 'سيلفي', category: 'مسلسل سعودي لناصر القصبي' },
+  { answer: 'العاصوف', category: 'مسلسل درامي سعودي' },
+  { answer: 'الهيبة', category: 'مسلسل لبناني سوري' },
+  { answer: 'رقية وسبيكة', category: 'مسلسل كويتي' },
+
+  // برامج تلفزيونية عربية مشهورة
+  { answer: 'من سيربح المليون', category: 'برنامج مسابقات عربي' },
+  { answer: 'ستار أكاديمي', category: 'برنامج مواهب عربي' },
+  { answer: 'عرب آيدول', category: 'برنامج مواهب غنائي' },
+  { answer: 'خواطر', category: 'برنامج لأحمد الشقيري' },
+  { answer: 'الاتجاه المعاكس', category: 'برنامج حواري سياسي' },
+  { answer: 'صاحبة السعادة', category: 'برنامج لإسعاد يونس' }
 ];
 
 function clearPasswordTimers() {
@@ -3533,17 +4689,17 @@ function getGuesserTeamName() {
   return gameState.teams[gameState.password.guesserTeamIndex];
 }
 
-function getNextPasswordWord() {
+function getNextPasswordPhrase() {
   const { password } = gameState;
 
   if (password.poolPointer >= password.shuffledIndices.length) {
-    password.shuffledIndices = shuffleArray(PASSWORD_WORDS.map((_, index) => index));
+    password.shuffledIndices = shuffleArray(PASSWORD_PHRASES.map((_, index) => index));
     password.poolPointer = 0;
   }
 
-  const wordIndex = password.shuffledIndices[password.poolPointer];
+  const phraseIndex = password.shuffledIndices[password.poolPointer];
   password.poolPointer += 1;
-  return PASSWORD_WORDS[wordIndex];
+  return PASSWORD_PHRASES[phraseIndex];
 }
 
 function pickPasswordTeams() {
@@ -3567,8 +4723,20 @@ function pickPasswordTeams() {
   password.guesserTeamIndex = guesserTeamIndex;
 }
 
+// تطبيع عربي متسامح: يوحّد الألف والتاء المربوطة والألف المقصورة،
+// ويزيل التشكيل والتطويل وعلامات الترقيم، حتى يسهل مطابقة العبارات.
 function normalizePasswordText(text) {
-  return text.trim().replace(/\s+/g, ' ');
+  return (text || '')
+    .replace(/[ً-ْٰ]/g, '')   // التشكيل
+    .replace(/ـ/g, '')                   // التطويل (ـ)
+    .replace(/[أإآا]/g, 'ا') // توحيد الألف
+    .replace(/ى/g, 'ي')             // الألف المقصورة → ياء
+    .replace(/ؤ/g, 'و')             // ؤ → و
+    .replace(/ئ/g, 'ي')             // ئ → ي
+    .replace(/ة/g, 'ه')             // التاء المربوطة → هاء
+    .replace(/[^؀-ۿ0-9\s]/g, ' ')   // إزالة الرموز/الترقيم
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function updatePasswordScoresDisplay() {
@@ -3617,8 +4785,8 @@ function setPasswordPhaseUI(phase) {
   }
   if (hintEl) {
     hintEl.textContent = phase === 'read'
-      ? 'فريق الوصف: اقرأوا الكلمة وصفوها لفريق التخمين (بدون ذكر الكلمة!)'
-      : 'فريق التخمين: اكتبوا الكلمة الصحيحة';
+      ? 'فريق الوصف: اقرأوا العبارة وتصنيفها وصفوها لفريق التخمين (بدون ذكر العبارة!)'
+      : 'فريق التخمين: اكتبوا العبارة الصحيحة';
   }
 }
 
@@ -3655,7 +4823,7 @@ function startPasswordReadTimer() {
 
 function startPasswordGuessTimer() {
   stopPasswordTimer();
-  gameState.password.timeLeft = getRoundDuration(60);
+  gameState.password.timeLeft = getRoundDuration(30);
   updatePasswordTimerDisplay();
 
   gameState.password.timerId = setInterval(() => {
@@ -3727,7 +4895,14 @@ function handlePasswordGuessTimeout() {
   if (gameState.password.answered || gameState.password.phase !== 'guess') return;
 
   const answer = gameState.password.currentWord;
-  finishPasswordRoundAfterAnswer(false, 0, `انتهى الوقت! الكلمة: ${answer}`);
+  finishPasswordRoundAfterAnswer(false, 0, `انتهى الوقت! العبارة: ${answer}`);
+}
+
+function updatePasswordCategoryDisplay() {
+  const categoryEl = document.getElementById('password-secret-category');
+  if (categoryEl) {
+    categoryEl.textContent = gameState.password.currentCategory || '';
+  }
 }
 
 function startPasswordGuessPhase() {
@@ -3740,7 +4915,7 @@ function startPasswordGuessPhase() {
 
   const secretEl = document.getElementById('password-secret-word');
   if (secretEl) {
-    secretEl.textContent = '???';
+    secretEl.textContent = '؟؟؟';
   }
 
   const inputEl = document.getElementById('password-guess-input');
@@ -3764,6 +4939,7 @@ function startPasswordReadPhase() {
   if (secretEl) {
     secretEl.textContent = password.currentWord;
   }
+  updatePasswordCategoryDisplay();
 
   setPasswordPhaseUI('read');
   setPasswordGuessInputEnabled(false);
@@ -3782,7 +4958,9 @@ function showNextPasswordRound() {
   pickPasswordTeams();
   const { password } = gameState;
 
-  password.currentWord = getNextPasswordWord();
+  const phrase = getNextPasswordPhrase();
+  password.currentWord = phrase.answer;
+  password.currentCategory = phrase.category;
   password.phase = 'idle';
   password.roundNumber += 1;
 
@@ -3817,7 +4995,7 @@ function startPasswordGame() {
   hidePasswordFeedback();
 
   gameState.password.shuffledIndices = shuffleArray(
-    PASSWORD_WORDS.map((_, index) => index)
+    PASSWORD_PHRASES.map((_, index) => index)
   );
   gameState.password.poolPointer = 0;
   gameState.password.teamRoundCounts = {};
@@ -3825,6 +5003,7 @@ function startPasswordGame() {
   gameState.password.describerTeamIndex = 0;
   gameState.password.guesserTeamIndex = 0;
   gameState.password.currentWord = '';
+  gameState.password.currentCategory = '';
   gameState.password.phase = 'idle';
   gameState.password.answered = false;
 
@@ -3852,9 +5031,10 @@ function startCreativeGame() {
   gameState.creative.currentTeamIndex = 0;
   gameState.creative.teamRoundCounts = {};
   gameState.creative.currentChallenge = null;
-  gameState.creative.evaluatorTeamIndex = 0;
   gameState.creative.phase = 'idle';
   gameState.creative.answerText = '';
+  gameState.creative.timeSpent = 0;
+  gameState.creative.evaluating = false;
   gameState.creative.rated = false;
 
   gameState.teams.forEach((team) => {
@@ -3874,16 +5054,15 @@ function startMemoryGame() {
   clearMemoryTimers();
   hideMemoryFeedback();
 
-  gameState.memory.shuffledRoundSeeds = shuffleArray(
-    MEMORY_ICON_PUZZLES.map((_, index) => index)
-  );
-  gameState.memory.poolPointer = 0;
+  const mode = getMemoryModeConfig();
+  gameState.memory.gridSize = mode.gridSize;
   gameState.memory.currentTeamIndex = 0;
   gameState.memory.teamRoundCounts = {};
-  gameState.memory.correctOrder = [];
-  gameState.memory.currentOrder = [];
-  gameState.memory.revealedCells = [];
-  gameState.memory.selectedCellIndex = null;
+  gameState.memory.cardOrder = [];
+  gameState.memory.matched = [];
+  gameState.memory.selection = null;
+  gameState.memory.flashPair = null;
+  gameState.memory.inputLocked = false;
   gameState.memory.phase = 'idle';
   gameState.memory.answered = false;
 
@@ -4411,7 +5590,7 @@ function startTaifIntro() {
   const startBtn = document.getElementById('taif-start-btn');
 
   if (startBtn) {
-    startBtn.hidden = true;
+    startBtn.hidden = false;
   }
 
   const { text: textEl, heroText } = getTaifStageElements();
@@ -4422,16 +5601,6 @@ function startTaifIntro() {
   playWelcomeSound();
 
   typewriterEffect(getTaifWelcomeText(), () => {
-    const taifScreen = document.getElementById('taif-screen');
-    if (
-      startBtn &&
-      taifScreen?.classList.contains('active') &&
-      typeof isTaifTypewriterActive === 'function' &&
-      !isTaifTypewriterActive()
-    ) {
-      startBtn.hidden = false;
-      startBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
     if (typeof syncTaifLayoutOffset === 'function') syncTaifLayoutOffset();
   });
 }
@@ -4550,6 +5719,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const picmergeModeBackBtn = document.getElementById('picmerge-mode-back-btn');
+  if (picmergeModeBackBtn) {
+    picmergeModeBackBtn.addEventListener('click', () => {
+      showScreen('game-select-screen');
+      renderGameSelectScreen();
+    });
+  }
+
+  const memoryModeBackBtn = document.getElementById('memory-mode-back-btn');
+  if (memoryModeBackBtn) {
+    memoryModeBackBtn.addEventListener('click', () => {
+      showScreen('game-select-screen');
+      renderGameSelectScreen();
+    });
+  }
+
   const sentenceCheckBtn = document.getElementById('sentence-check-btn');
   if (sentenceCheckBtn) {
     sentenceCheckBtn.addEventListener('click', handleSentenceCheck);
@@ -4571,11 +5756,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const spotClickScene = document.getElementById('spot-right-scene');
   if (spotClickScene) {
     spotClickScene.addEventListener('click', handleSpotCanvasClick);
-  }
-
-  const memoryCheckBtn = document.getElementById('memory-check-btn');
-  if (memoryCheckBtn) {
-    memoryCheckBtn.addEventListener('click', handleMemoryCheck);
   }
 
   const playAllRandomBtn = document.getElementById('play-all-random-btn');
@@ -4617,7 +5797,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const creativeClearBtn = document.getElementById('creative-clear-btn');
   if (creativeClearBtn) {
-    creativeClearBtn.addEventListener('click', clearCreativeCanvas);
+    creativeClearBtn.addEventListener('click', () => {
+      saveCreativeUndoState();
+      clearCreativeCanvas();
+    });
+  }
+
+  const toolBrushBtn = document.getElementById('creative-tool-brush');
+  const toolEraserBtn = document.getElementById('creative-tool-eraser');
+  const toolFillBtn = document.getElementById('creative-tool-fill');
+  if (toolBrushBtn) toolBrushBtn.addEventListener('click', () => setCreativeActiveTool('brush'));
+  if (toolEraserBtn) toolEraserBtn.addEventListener('click', () => setCreativeActiveTool('eraser'));
+  if (toolFillBtn) toolFillBtn.addEventListener('click', () => setCreativeActiveTool('fill'));
+
+  document.querySelectorAll('.creative-size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      gameState.creative.brushSize = parseInt(btn.dataset.size, 10);
+      document.querySelectorAll('.creative-size-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+
+  const creativeUndoBtn = document.getElementById('creative-undo-btn');
+  const creativeRedoBtn = document.getElementById('creative-redo-btn');
+  if (creativeUndoBtn) creativeUndoBtn.addEventListener('click', creativeUndo);
+  if (creativeRedoBtn) creativeRedoBtn.addEventListener('click', creativeRedo);
+
+  const creativeNextBtn = document.getElementById('creative-next-btn');
+  if (creativeNextBtn) {
+    creativeNextBtn.addEventListener('click', handleCreativeNext);
+  }
+
+  const creativeKeySaveBtn = document.getElementById('creative-key-save');
+  if (creativeKeySaveBtn) {
+    creativeKeySaveBtn.addEventListener('click', handleCreativeKeySave);
+  }
+
+  const creativeKeySkipBtn = document.getElementById('creative-key-skip');
+  if (creativeKeySkipBtn) {
+    creativeKeySkipBtn.addEventListener('click', handleCreativeKeySkip);
+  }
+
+  const creativeKeyInput = document.getElementById('creative-key-input');
+  if (creativeKeyInput) {
+    creativeKeyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleCreativeKeySave();
+      }
+    });
   }
 
   const passwordSubmitBtn = document.getElementById('password-submit-btn');

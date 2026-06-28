@@ -6,7 +6,8 @@
   "scripts": {
     "remove-bg": "node scripts/remove-bg.mjs",
     "generate-lottie": "node scripts/generate-taif-lottie.mjs",
-    "generate-placeholders": "node scripts/generate-placeholders.mjs"
+    "generate-placeholders": "node scripts/generate-placeholders.mjs",
+    "build-spot": "node scripts/build-spot-puzzles.mjs"
   },
   "keywords": [],
   "author": "",
