@@ -94,14 +94,20 @@
     return Array.isArray(data.items) ? data.items : [];
   }
   async function serverWrite(method, payload) {
-    const r = await fetch(API, {
-      method,
-      headers: { 'Content-Type': 'application/json', 'x-write-key': getPasscode() },
-      body: JSON.stringify(payload),
-    });
+    let r;
+    try {
+      r = await fetch(API, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-write-key': getPasscode() },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) { throw new Error('network: ' + (e && e.message || e)); }
+    if (r.ok) return;
     if (r.status === 401) throw new Error('unauthorized');
     if (r.status === 503) throw new Error('storage-not-configured');
-    if (!r.ok) throw new Error(method + ' ' + r.status);
+    let detail = '';
+    try { const j = await r.json(); detail = j && j.error ? j.error : ''; } catch { /* non-json */ }
+    throw new Error(`${method} ${r.status}${detail ? ': ' + detail : ''}`);
   }
   // يطلب رمز المضيف عند الحاجة ويعيد المحاولة مرة واحدة
   async function withPasscode(fn) {
@@ -422,7 +428,8 @@
     const m = String(err && err.message);
     if (m === 'storage-not-configured') return 'الخادم غير مُهيّأ بعد (لم تُضبط خدمة التخزين).';
     if (m === 'unauthorized') return 'رمز المضيف غير صحيح.';
-    if (m.includes('Failed to fetch') || m.startsWith('POST') || m.startsWith('DELETE')) return 'تعذّر الاتصال بالخادم — تأكد من اتصالك بالإنترنت.';
+    if (m.startsWith('network')) return 'تعذّر الاتصال بالخادم — تأكد من اتصالك بالإنترنت.';
+    if (/^(POST|DELETE|GET|BLOB)\b/.test(m)) return 'تعذّر الحفظ — ' + m;
     return 'تعذّر الحفظ (قد تكون الصورة كبيرة جدًا).';
   }
 
@@ -450,7 +457,8 @@
           window.alert(`تم رفع ${n} عنصرًا — صارت متاحة على كل الأجهزة.`);
         } catch (err) {
           btn.disabled = false; btn.textContent = 'رفع للخادم الآن';
-          window.alert(String(err && err.message) === 'unauthorized' ? 'رمز المضيف غير صحيح.' : 'تعذّر الرفع، حاول مرة أخرى.');
+          const m = String(err && err.message);
+          window.alert(m === 'unauthorized' ? 'رمز المضيف غير صحيح.' : ('تعذّر الرفع — ' + m));
         }
       });
       return;

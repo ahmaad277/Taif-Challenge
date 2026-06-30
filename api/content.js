@@ -73,7 +73,9 @@ module.exports = async function handler(req, res) {
         return;
       }
       const body = await readBody(req);
-      let items = await readItems(await findBlobUrl(list));
+      let items;
+      try { items = await readItems(await findBlobUrl(list)); }
+      catch (e) { res.status(500).json({ error: 'read-stage: ' + String((e && e.message) || e) }); return; }
 
       if (req.method === 'POST') {
         const item = body && body.item;
@@ -86,14 +88,17 @@ module.exports = async function handler(req, res) {
         items = items.filter((x) => x.id !== id);
       }
 
-      const result = await put(FILE, JSON.stringify({ items, updatedAt: Date.now() }), {
-        access: 'public',
-        contentType: 'application/json',
-        token: TOKEN,
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        cacheControlMaxAge: 0,
-      });
+      let result;
+      try {
+        result = await put(FILE, JSON.stringify({ items, updatedAt: Date.now() }), {
+          access: 'public',
+          contentType: 'application/json',
+          token: TOKEN,
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          cacheControlMaxAge: 0,
+        });
+      } catch (e) { res.status(500).json({ error: 'put-stage: ' + String((e && e.message) || e) }); return; }
       res.status(200).json({ ok: true, url: result.url });
       return;
     }
