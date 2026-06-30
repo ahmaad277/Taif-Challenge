@@ -489,7 +489,7 @@ function addTeamScore(teamName, points) {
 }
 
 function awardStandardScore(teamName, elapsedSeconds, gameId) {
-  const threshold = SCORE_SPEED_THRESHOLDS[gameId];
+  const threshold = getSpeedThreshold(gameId);
   const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, threshold);
   addTeamScore(teamName, points);
   return { points, bonusText };
@@ -499,16 +499,58 @@ function isSurpriseRound() {
   return gameState.session.surpriseActive === true;
 }
 
+/* ============================================================================
+ * جسر الإعدادات — المحرك يقرأ القيم القابلة للتخصيص من window.TAIF_SETTINGS
+ * تُضبط من شاشة الإعدادات (js/settings.js). عند غياب الإعداد تُستخدم القيمة
+ * الافتراضية الممرّرة، فيبقى المحرك سليمًا حتى لو لم يُحمَّل ملف الإعدادات بعد.
+ * ========================================================================== */
+function getTiming(game, key, fallback) {
+  const t = window.TAIF_SETTINGS && window.TAIF_SETTINGS.timings && window.TAIF_SETTINGS.timings[game];
+  const v = t && t[key];
+  return (typeof v === 'number' && v >= 0) ? v : fallback;
+}
+
+function getScoringCfg(key, fallback) {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.scoring;
+  const v = s && s[key];
+  return (typeof v === 'number' && v >= 0) ? v : fallback;
+}
+
+function getRoundsCfg(game, fallback) {
+  const r = window.TAIF_SETTINGS && window.TAIF_SETTINGS.rounds;
+  const v = r && r[game];
+  return (typeof v === 'number' && v > 0) ? v : fallback;
+}
+
+function getSurpriseMultiplier() {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.scoring;
+  const v = s && s.surpriseMultiplier;
+  return (typeof v === 'number' && v > 1) ? v : 2;
+}
+
+function isSurpriseEnabled() {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.scoring;
+  return !(s && s.surpriseEnabled === false);
+}
+
+function getSpeedThreshold(game) {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.speedThresholds;
+  const v = s && s[game];
+  return (typeof v === 'number' && v > 0) ? v : SCORE_SPEED_THRESHOLDS[game];
+}
+
 function getRoundDuration(baseSeconds) {
-  return isSurpriseRound() ? baseSeconds * 2 : baseSeconds;
+  return isSurpriseRound() ? baseSeconds * getSurpriseMultiplier() : baseSeconds;
 }
 
-function getCorrectPoints(basePoints = 10) {
-  return isSurpriseRound() ? basePoints * 2 : basePoints;
+function getCorrectPoints(basePoints) {
+  const base = (typeof basePoints === 'number') ? basePoints : getScoringCfg('correctPoints', 10);
+  return isSurpriseRound() ? base * getSurpriseMultiplier() : base;
 }
 
-function getSpeedBonus(baseBonus = 5) {
-  return isSurpriseRound() ? baseBonus * 2 : baseBonus;
+function getSpeedBonus(baseBonus) {
+  const base = (typeof baseBonus === 'number') ? baseBonus : getScoringCfg('speedBonus', 5);
+  return isSurpriseRound() ? base * getSurpriseMultiplier() : base;
 }
 
 function calculateSpeedPoints(elapsedSeconds, speedThresholdSeconds) {
@@ -633,7 +675,7 @@ function getPartialResultsContinueLabel() {
     return 'عرض النتائج النهائية';
   }
 
-  if (!session.surpriseShown && session.completedGameIds.length >= 3) {
+  if (!session.surpriseShown && session.completedGameIds.length >= 3 && isSurpriseEnabled()) {
     return 'جولة المفاجأة!';
   }
 
@@ -654,7 +696,7 @@ function getPartialResultsSubtitle(completedGameId) {
     return text;
   }
 
-  if (!session.surpriseShown && session.completedGameIds.length >= 3) {
+  if (!session.surpriseShown && session.completedGameIds.length >= 3 && isSurpriseEnabled()) {
     return `${text} — القادم: جولة المفاجأة!`;
   }
 
@@ -1161,6 +1203,12 @@ function startSurpriseIntro() {
     gameNameEl.textContent = entry.name;
   }
 
+  const hintEl = document.getElementById('surprise-multiplier-hint');
+  if (hintEl) {
+    const m = getSurpriseMultiplier();
+    hintEl.textContent = `مؤقت ×${m} | نقاط ×${m}`;
+  }
+
   document.body.classList.remove('surprise-round-active');
   showScreen('surprise-screen');
   playSurpriseSound();
@@ -1192,7 +1240,7 @@ function onGameCompleted(completedId) {
       return;
     }
 
-    if (!session.surpriseShown && session.completedGameIds.length >= 3) {
+    if (!session.surpriseShown && session.completedGameIds.length >= 3 && isSurpriseEnabled()) {
       session.surpriseShown = true;
       startSurpriseIntro();
       return;
@@ -1310,7 +1358,7 @@ function updateTriviaTimerDisplay() {
 
 function startTriviaTimer() {
   stopTriviaTimer();
-  gameState.trivia.timeLeft = getRoundDuration(15);
+  gameState.trivia.timeLeft = getRoundDuration(getTiming('trivia', 'play', 15));
   updateTriviaTimerDisplay();
 
   gameState.trivia.timerId = setInterval(() => {
@@ -1564,7 +1612,7 @@ function updateSentenceTimerDisplay() {
 
 function startSentenceTimer() {
   stopSentenceTimer();
-  gameState.sentence.timeLeft = getRoundDuration(30);
+  gameState.sentence.timeLeft = getRoundDuration(getTiming('sentence', 'play', 30));
   updateSentenceTimerDisplay();
 
   gameState.sentence.timerId = setInterval(() => {
@@ -1828,6 +1876,16 @@ function scheduleNextSentenceRound() {
   }, 1500);
 }
 
+function showSentenceNextButton(show) {
+  const btn = document.getElementById('sentence-next-btn');
+  if (btn) btn.hidden = !show;
+}
+
+function handleSentenceNext() {
+  if (!gameState.sentence.answered) return;
+  showNextSentenceRound();
+}
+
 function finishSentenceRoundAfterAnswer(isCorrect, points) {
   gameState.sentence.answered = true;
   stopSentenceTimer();
@@ -1850,7 +1908,7 @@ function finishSentenceRoundAfterAnswer(isCorrect, points) {
 
   updateSentenceScoresDisplay();
   advanceSentenceTurn();
-  scheduleNextSentenceRound();
+  showSentenceNextButton(true);
 }
 
 function handleSentenceCheck() {
@@ -1863,7 +1921,7 @@ function handleSentenceCheck() {
 
   if (isCorrect) {
     const teamName = getCurrentSentenceTeamName();
-    const { points } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.sentence);
+    const { points } = calculateSpeedPoints(elapsedSeconds, getSpeedThreshold('sentence'));
     finishSentenceRoundAfterAnswer(true, points);
     return;
   }
@@ -1885,12 +1943,13 @@ function handleSentenceTimeout() {
   }
 
   advanceSentenceTurn();
-  scheduleNextSentenceRound();
+  showSentenceNextButton(true);
 }
 
 function showNextSentenceRound() {
   clearSentenceTimers();
   hideSentenceFeedback();
+  showSentenceNextButton(false);
 
   if (isSentenceComplete()) {
     finishSentenceGame();
@@ -2584,7 +2643,7 @@ function startPicmergePenalty(teamName) {
   setPicmergeBattleInputEnabled(teamIndex, false);
   row?.classList.add('picmerge-battle-row--penalized');
 
-  const duration = getRoundDuration(15);
+  const duration = getRoundDuration(getTiming('picmerge', 'penalty', 15));
   picmerge.penaltyDisplayTeam = teamName;
   updatePicmergePenaltyTimerDisplay();
 
@@ -2641,7 +2700,7 @@ function showPicmergeImage(puzzle) {
 
 function startPicmergeTimer() {
   stopPicmergeTimer();
-  gameState.picmerge.timeLeft = getRoundDuration(40);
+  gameState.picmerge.timeLeft = getRoundDuration(getTiming('picmerge', 'play', 40));
   updatePicmergeTimerDisplay();
 
   gameState.picmerge.timerId = setInterval(() => {
@@ -2702,7 +2761,7 @@ function handlePicmergeSubmit() {
   const elapsedSeconds = (Date.now() - picmerge.questionStartTime) / 1000;
 
   if (isCorrect) {
-    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.picmerge);
+    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, getSpeedThreshold('picmerge'));
     finishPicmergeRound(true, points, `صح! +${points} نقطة${bonusText}`);
     return;
   }
@@ -2726,7 +2785,7 @@ function handlePicmergeBattleSubmit(teamIndex) {
   const elapsedSeconds = (Date.now() - picmerge.questionStartTime) / 1000;
 
   if (isCorrect) {
-    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.picmerge);
+    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, getSpeedThreshold('picmerge'));
     finishPicmergeBattleRound(teamName, points, `صح! ${teamName} +${points} نقطة${bonusText}`);
     return;
   }
@@ -3047,7 +3106,7 @@ function stopSpotTimer() {
 
 function startSpotTimer() {
   stopSpotTimer();
-  gameState.spot.timeLeft = getRoundDuration(60);
+  gameState.spot.timeLeft = getRoundDuration(getTiming('spot', 'play', 60));
   updateSpotTimerDisplay();
 
   gameState.spot.timerId = setInterval(() => {
@@ -3075,13 +3134,23 @@ function scheduleNextSpotRound() {
   }, 1500);
 }
 
+function showSpotNextButton(show) {
+  const btn = document.getElementById('spot-next-btn');
+  if (btn) btn.hidden = !show;
+}
+
+function handleSpotNext() {
+  if (gameState.spot.roundActive) return;
+  showNextSpotRound();
+}
+
 function finishSpotRound(message, isSuccess) {
   gameState.spot.roundActive = false;
   stopSpotTimer();
   showSpotFeedback(message, isSuccess);
   updateSpotScoresDisplay();
   advanceSpotTurn();
-  scheduleNextSpotRound();
+  showSpotNextButton(true);
 }
 
 function handleSpotCanvasClick(event) {
@@ -3098,6 +3167,8 @@ function handleSpotCanvasClick(event) {
 
   if (hitIndex === -1) {
     placeSpotMarker(x, y, 'wrong');
+    gameState.spot.timeLeft = Math.max(0, gameState.spot.timeLeft - getTiming('spot', 'penalty', 2));
+    updateSpotTimerDisplay();
     return;
   }
 
@@ -3135,6 +3206,7 @@ function handleSpotTimeout() {
 function showNextSpotRound() {
   clearSpotTimers();
   hideSpotFeedback();
+  showSpotNextButton(false);
 
   if (isSpotComplete()) {
     finishSpotGame();
@@ -3184,7 +3256,15 @@ const MEMORY_MISMATCH_PENALTY_SEC = 2;
 const MEMORY_MISMATCH_FLASH_MS = 1000;
 
 function getMemoryModeConfig() {
-  return MEMORY_MODES[gameState.memory.playMode] || MEMORY_MODES.medium;
+  const mode = gameState.memory.playMode;
+  const base = MEMORY_MODES[mode] || MEMORY_MODES.medium;
+  const ov = window.TAIF_SETTINGS && window.TAIF_SETTINGS.memory && window.TAIF_SETTINGS.memory[mode];
+  if (!ov) return base;
+  return {
+    gridSize: base.gridSize,
+    memorizeSec: (typeof ov.memorizeSec === 'number' && ov.memorizeSec > 0) ? ov.memorizeSec : base.memorizeSec,
+    playSec: (typeof ov.playSec === 'number' && ov.playSec > 0) ? ov.playSec : base.playSec
+  };
 }
 
 function getMemoryCellCount() {
@@ -3586,7 +3666,7 @@ function applyMemoryMismatchPenalty(indexA, indexB) {
   memory.selection = null;
   renderMemoryGrid();
 
-  memory.timeLeft = Math.max(0, memory.timeLeft - MEMORY_MISMATCH_PENALTY_SEC);
+  memory.timeLeft = Math.max(0, memory.timeLeft - getTiming('memory', 'penalty', MEMORY_MISMATCH_PENALTY_SEC));
   updateMemoryTimerDisplay();
   showMemoryPenaltyFlash();
   playLoseSound();
@@ -3641,7 +3721,7 @@ function handleMemoryCellClick(index) {
 
     if (isMemoryBoardComplete()) {
       const elapsedSeconds = (Date.now() - memory.questionStartTime) / 1000;
-      const { points } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.memory);
+      const { points } = calculateSpeedPoints(elapsedSeconds, getSpeedThreshold('memory'));
       finishMemoryRoundAfterAnswer(true, points);
       if (typeof taifQuipCorrect === 'function') taifQuipCorrect();
     }
@@ -3665,6 +3745,16 @@ function scheduleNextMemoryRound() {
   }, 1500);
 }
 
+function showMemoryNextButton(show) {
+  const btn = document.getElementById('memory-next-btn');
+  if (btn) btn.hidden = !show;
+}
+
+function handleMemoryNext() {
+  if (!gameState.memory.answered) return;
+  showNextMemoryRound();
+}
+
 function finishMemoryRoundAfterAnswer(isCorrect, points) {
   const { memory } = gameState;
   memory.answered = true;
@@ -3681,7 +3771,7 @@ function finishMemoryRoundAfterAnswer(isCorrect, points) {
 
   updateMemoryScoresDisplay();
   advanceMemoryTurn();
-  scheduleNextMemoryRound();
+  showMemoryNextButton(true);
 }
 
 function handleMemoryTimeout() {
@@ -3695,12 +3785,13 @@ function handleMemoryTimeout() {
   playLoseSound();
   updateMemoryScoresDisplay();
   advanceMemoryTurn();
-  scheduleNextMemoryRound();
+  showMemoryNextButton(true);
 }
 
 function showNextMemoryRound() {
   clearMemoryTimers();
   hideMemoryFeedback();
+  showMemoryNextButton(false);
 
   if (isMemoryComplete()) {
     finishMemoryGame();
@@ -4157,7 +4248,7 @@ function stopCreativeTimer() {
 
 function startCreativeTimer() {
   stopCreativeTimer();
-  gameState.creative.roundDuration = getRoundDuration(75);
+  gameState.creative.roundDuration = getRoundDuration(getTiming('creative', 'play', 75));
   gameState.creative.timeLeft = gameState.creative.roundDuration;
   updateCreativeTimerDisplay();
 
@@ -4414,7 +4505,7 @@ function finalizeCreativeScore(score, comment, fromAI) {
   creative.rated = true;
 
   const creatorName = getCurrentCreativeTeamName();
-  const awardedScore = score * (isSurpriseRound() ? 2 : 1);
+  const awardedScore = score * (isSurpriseRound() ? getSurpriseMultiplier() : 1);
   addTeamScore(creatorName, awardedScore);
 
   const verdict = comment && comment.length
@@ -4438,7 +4529,6 @@ function finalizeCreativeScore(score, comment, fromAI) {
   updateCreativeScoresDisplay();
   showCreativeNextButton(true);
   advanceCreativeTurn();
-  scheduleNextCreativeRound();
 }
 
 async function runCreativeEvaluation() {
@@ -4807,7 +4897,7 @@ function stopPasswordTimer() {
 
 function startPasswordReadTimer() {
   stopPasswordTimer();
-  gameState.password.timeLeft = getRoundDuration(30);
+  gameState.password.timeLeft = getRoundDuration(getTiming('password', 'read', 30));
   updatePasswordTimerDisplay();
 
   gameState.password.timerId = setInterval(() => {
@@ -4823,7 +4913,7 @@ function startPasswordReadTimer() {
 
 function startPasswordGuessTimer() {
   stopPasswordTimer();
-  gameState.password.timeLeft = getRoundDuration(30);
+  gameState.password.timeLeft = getRoundDuration(getTiming('password', 'play', 30));
   updatePasswordTimerDisplay();
 
   gameState.password.timerId = setInterval(() => {
@@ -4883,7 +4973,7 @@ function handlePasswordSubmit() {
   const elapsedSeconds = (Date.now() - gameState.password.guessStartTime) / 1000;
 
   if (isCorrect) {
-    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, SCORE_SPEED_THRESHOLDS.password);
+    const { points, bonusText } = calculateSpeedPoints(elapsedSeconds, getSpeedThreshold('password'));
     finishPasswordRoundAfterAnswer(true, points, `صح! +${points} نقطة${bonusText}`);
     return;
   }
@@ -4979,6 +5069,24 @@ function showNextPasswordRound() {
   if (progressEl) {
     progressEl.textContent = `الجولة ${password.roundNumber} — ${describerName} ضد ${guesserName}`;
   }
+
+  updatePasswordScoresDisplay();
+  startPasswordReadPhase();
+}
+
+// تغيير العبارة الحالية مع الإبقاء على نفس فريقَي الوصف والتخمين ودون خصم نقاط ولا تقدّم الجولة.
+function changePasswordRound() {
+  clearPasswordTimers();
+  hidePasswordFeedback();
+
+  if (isPasswordComplete()) return;
+
+  const { password } = gameState;
+  const phrase = getNextPasswordPhrase();
+  password.currentWord = phrase.answer;
+  password.currentCategory = phrase.category;
+  password.phase = 'idle';
+  password.answered = false;
 
   updatePasswordScoresDisplay();
   startPasswordReadPhase();
@@ -5205,13 +5313,19 @@ function hideTeamsError() {
 }
 
 let sharedAudioCtx = null;
+let sharedMasterGain = null;
 const timerTickLast = {};
 
 function getAudioContext() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return null;
-    if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx();
+      sharedMasterGain = sharedAudioCtx.createGain();
+      sharedMasterGain.gain.value = getMasterVolume();
+      sharedMasterGain.connect(sharedAudioCtx.destination);
+    }
     if (sharedAudioCtx.state === 'suspended') {
       sharedAudioCtx.resume();
     }
@@ -5221,7 +5335,44 @@ function getAudioContext() {
   }
 }
 
+// مخرج كل المؤثرات يمرّ عبر بوابة الصوت الرئيسية (للتحكم في المستوى/الكتم)
+function getSoundDestination() {
+  return sharedMasterGain || (sharedAudioCtx && sharedAudioCtx.destination);
+}
+
+function getMasterVolume() {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.sound;
+  if (s && s.enabled === false) return 0;
+  const v = s && typeof s.volume === 'number' ? s.volume : 0.8;
+  return Math.max(0, Math.min(1, v));
+}
+
+function applySoundVolume() {
+  if (sharedMasterGain) sharedMasterGain.gain.value = getMasterVolume();
+}
+
+// هل يُسمح بمؤثر من فئة معيّنة؟ (ui / tick / effects)
+function sfxAllowed(category) {
+  const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.sound;
+  if (!s) return true;
+  if (s.enabled === false) return false;
+  if (s.events && s.events[category] === false) return false;
+  return true;
+}
+
+// اهتزاز الجهاز عند الخطأ/انتهاء الوقت (إن دعمه الجهاز وفُعّل)
+function taifVibrate(pattern) {
+  try {
+    const s = window.TAIF_SETTINGS && window.TAIF_SETTINGS.sound;
+    if (s && s.vibration === false) return;
+    if (navigator && typeof navigator.vibrate === 'function') navigator.vibrate(pattern);
+  } catch {
+    // غير مدعوم
+  }
+}
+
 function playClickSound() {
+  if (!sfxAllowed('ui')) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -5238,7 +5389,7 @@ function playClickSound() {
     gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.08);
 
     oscillator.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSoundDestination());
 
     oscillator.start(start);
     oscillator.stop(start + 0.09);
@@ -5248,37 +5399,41 @@ function playClickSound() {
 }
 
 function playLoseSound() {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
+  taifVibrate([60, 40, 80]);
+  if (sfxAllowed('effects')) {
+    try {
+      const ctx = getAudioContext();
+      if (ctx) {
+        const start = ctx.currentTime;
+        [400, 250].forEach((freq, index) => {
+          const oscillator = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const noteStart = start + index * 0.15;
 
-    const start = ctx.currentTime;
-    [400, 250].forEach((freq, index) => {
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const noteStart = start + index * 0.15;
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.setValueAtTime(freq, noteStart);
 
-      oscillator.type = 'sawtooth';
-      oscillator.frequency.setValueAtTime(freq, noteStart);
+          gain.gain.setValueAtTime(0.0001, noteStart);
+          gain.gain.exponentialRampToValueAtTime(0.18, noteStart + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.2);
 
-      gain.gain.setValueAtTime(0.0001, noteStart);
-      gain.gain.exponentialRampToValueAtTime(0.18, noteStart + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.2);
+          oscillator.connect(gain);
+          gain.connect(getSoundDestination());
 
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-
-      oscillator.start(noteStart);
-      oscillator.stop(noteStart + 0.25);
-    });
-  } catch {
-    // Audio may be blocked.
+          oscillator.start(noteStart);
+          oscillator.stop(noteStart + 0.25);
+        });
+      }
+    } catch {
+      // Audio may be blocked.
+    }
   }
 
   maybeTaifLoseQuip();
 }
 
 function playTickSound() {
+  if (!sfxAllowed('tick')) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -5295,7 +5450,7 @@ function playTickSound() {
     gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
 
     oscillator.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSoundDestination());
 
     oscillator.start(start);
     oscillator.stop(start + 0.11);
@@ -5316,7 +5471,7 @@ function maybePlayTimerTick(timeLeft, key) {
 }
 
 function playGameCompleteSound() {
-  try {
+  if (sfxAllowed('effects')) try {
     const ctx = getAudioContext();
     if (!ctx) return;
 
@@ -5336,7 +5491,7 @@ function playGameCompleteSound() {
       gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.25);
 
       oscillator.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(getSoundDestination());
 
       oscillator.start(noteStart);
       oscillator.stop(noteStart + 0.3);
@@ -5368,7 +5523,7 @@ function playSurpriseSound() {
     sweepGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.4);
 
     sweep.connect(sweepGain);
-    sweepGain.connect(ctx.destination);
+    sweepGain.connect(getSoundDestination());
     sweep.start(start);
     sweep.stop(start + 0.45);
 
@@ -5384,7 +5539,7 @@ function playSurpriseSound() {
     pingGain.gain.exponentialRampToValueAtTime(0.0001, pingStart + 0.3);
 
     ping.connect(pingGain);
-    pingGain.connect(ctx.destination);
+    pingGain.connect(getSoundDestination());
     ping.start(pingStart);
     ping.stop(pingStart + 0.35);
   } catch {
@@ -5411,7 +5566,7 @@ function playWelcomeSound() {
     gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.6);
 
     oscillator.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSoundDestination());
 
     oscillator.start(start);
     oscillator.stop(start + 0.6);
@@ -5445,6 +5600,7 @@ function populateConfetti(confettiEl, pieceCount = 40) {
 }
 
 function playVictorySound() {
+  if (!sfxAllowed('effects')) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -5465,7 +5621,7 @@ function playVictorySound() {
       gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.35);
 
       oscillator.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(getSoundDestination());
 
       oscillator.start(noteStart);
       oscillator.stop(noteStart + 0.4);
@@ -5484,7 +5640,7 @@ function playVictorySound() {
       gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + 0.9);
 
       oscillator.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(getSoundDestination());
 
       oscillator.start(chordStart);
       oscillator.stop(chordStart + 0.95);
@@ -5740,6 +5896,11 @@ document.addEventListener('DOMContentLoaded', () => {
     sentenceCheckBtn.addEventListener('click', handleSentenceCheck);
   }
 
+  const sentenceNextBtn = document.getElementById('sentence-next-btn');
+  if (sentenceNextBtn) {
+    sentenceNextBtn.addEventListener('click', handleSentenceNext);
+  }
+
   const picmergeSubmitBtn = document.getElementById('picmerge-submit-btn');
   const picmergeInput = document.getElementById('picmerge-input');
   if (picmergeSubmitBtn) {
@@ -5756,6 +5917,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const spotClickScene = document.getElementById('spot-right-scene');
   if (spotClickScene) {
     spotClickScene.addEventListener('click', handleSpotCanvasClick);
+  }
+
+  const spotNextBtn = document.getElementById('spot-next-btn');
+  if (spotNextBtn) {
+    spotNextBtn.addEventListener('click', handleSpotNext);
+  }
+
+  const memoryNextBtn = document.getElementById('memory-next-btn');
+  if (memoryNextBtn) {
+    memoryNextBtn.addEventListener('click', handleMemoryNext);
   }
 
   const playAllRandomBtn = document.getElementById('play-all-random-btn');
@@ -5864,6 +6035,25 @@ document.addEventListener('DOMContentLoaded', () => {
     backBtn.addEventListener('click', () => {
       stopAllGameTimers();
       returnToGameSelect();
+    });
+  });
+
+  // زر "تغيير السؤال": يستبدل السؤال/الجولة الحالية بأخرى للفريق نفسه دون خصم نقاط ولا تقدّم الدور.
+  const CHANGE_QUESTION_HANDLERS = {
+    'trivia-screen': showNextTriviaQuestion,
+    'sentence-screen': showNextSentenceRound,
+    'picmerge-screen': showNextPicmergeRound,
+    'spot-screen': showNextSpotRound,
+    'memory-screen': showNextMemoryRound,
+    'creative-screen': showNextCreativeRound,
+    'password-screen': changePasswordRound
+  };
+
+  document.querySelectorAll('.game-screen .game-change-btn').forEach((changeBtn) => {
+    changeBtn.addEventListener('click', () => {
+      const screen = changeBtn.closest('.game-screen');
+      const handler = screen ? CHANGE_QUESTION_HANDLERS[screen.id] : null;
+      if (handler) handler();
     });
   });
 });

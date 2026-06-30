@@ -372,7 +372,8 @@ function syncTaifLayoutVisibility() {
 }
 
 function shouldUseLottie() {
-  return new URLSearchParams(window.location.search).get('lottie') === '1';
+  if (new URLSearchParams(window.location.search).get('lottie') === '1') return true;
+  return !!(window.TAIF_SETTINGS && window.TAIF_SETTINGS.taif && window.TAIF_SETTINGS.taif.lottie === true);
 }
 
 function playTaifLottieState(stateName, loop = true) {
