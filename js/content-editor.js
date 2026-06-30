@@ -13,12 +13,20 @@
 (function () {
   'use strict';
 
-  // ---- تخزين IndexedDB ------------------------------------------------------
+  // ---- التخزين: الخادم مصدر الحقيقة + IndexedDB كاش محلي احتياطي --------------
+  const API = '/api/content';
   const DB_NAME = 'taifContent';
   const STORE = 'items';
   const DB_VER = 1;
+  const PASS_KEY = 'taif_content_passcode';
   let _dbPromise = null;
+  let serverOnline = false;          // هل آخر مزامنة مع الخادم نجحت؟
+  let localOnlyIds = [];             // عناصر في الكاش غير موجودة على الخادم (للترحيل)
 
+  const getPasscode = () => { try { return localStorage.getItem(PASS_KEY) || ''; } catch { return ''; } };
+  const setPasscode = (v) => { try { localStorage.setItem(PASS_KEY, v); } catch { /* ignore */ } };
+
+  // --- IndexedDB (كاش) ---
   function openDB() {
     if (_dbPromise) return _dbPromise;
     _dbPromise = new Promise((resolve, reject) => {
@@ -32,7 +40,7 @@
     });
     return _dbPromise;
   }
-  async function dbAll() {
+  async function cacheAll() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
@@ -40,7 +48,7 @@
       rq.onerror = () => reject(rq.error);
     });
   }
-  async function dbPut(item) {
+  async function cachePut(item) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
@@ -49,7 +57,7 @@
       tx.onerror = () => reject(tx.error);
     });
   }
-  async function dbDelete(id) {
+  async function cacheDelete(id) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
@@ -57,6 +65,97 @@
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+  }
+  async function cacheReplaceAll(items) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      store.clear();
+      items.forEach((it) => store.put(it));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // --- الخادم ---
+  // GET يرجّع رابط ملف content.json في Vercel Blob، ونقرأه مباشرة من الـ CDN
+  // (لتفادي حد حجم استجابة الدالة). يدعم أيضًا { items } مباشرة كاحتياط.
+  async function serverAll() {
+    const r = await fetch(API, { cache: 'no-store' });
+    if (r.status === 503) throw new Error('storage-not-configured');
+    if (!r.ok) throw new Error('GET ' + r.status);
+    const meta = await r.json();
+    if (Array.isArray(meta.items)) return meta.items;
+    if (!meta.url) return [];
+    const r2 = await fetch(meta.url, { cache: 'no-store' });
+    if (!r2.ok) throw new Error('BLOB ' + r2.status);
+    const data = await r2.json();
+    return Array.isArray(data.items) ? data.items : [];
+  }
+  async function serverWrite(method, payload) {
+    const r = await fetch(API, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-write-key': getPasscode() },
+      body: JSON.stringify(payload),
+    });
+    if (r.status === 401) throw new Error('unauthorized');
+    if (r.status === 503) throw new Error('storage-not-configured');
+    if (!r.ok) throw new Error(method + ' ' + r.status);
+  }
+  // يطلب رمز المضيف عند الحاجة ويعيد المحاولة مرة واحدة
+  async function withPasscode(fn) {
+    try { return await fn(); }
+    catch (e) {
+      if (String(e && e.message) === 'unauthorized') {
+        const code = window.prompt('🔒 أدخل رمز المضيف للإضافة والتعديل:');
+        if (code == null) throw e;
+        setPasscode(code.trim());
+        return fn();
+      }
+      throw e;
+    }
+  }
+
+  // واجهة موحّدة: تكتب على الخادم ثم تحدّث الكاش المحلي
+  async function dbAll() {
+    try {
+      const items = await serverAll();
+      serverOnline = true;
+      const serverIds = new Set(items.map((it) => it.id));
+      let localOnly = [];
+      try {
+        const cached = await cacheAll();
+        localOnly = cached.filter((it) => !serverIds.has(it.id)); // أُضيفت محليًا قبل المزامنة
+      } catch { localOnly = []; }
+      localOnlyIds = localOnly.map((it) => it.id);
+      const all = items.concat(localOnly); // اعرض المحلي أيضًا حتى لا يختفي قبل ترحيله
+      await cacheReplaceAll(all).catch(() => {}); // الكاش يحفظ الخادم + المحلي غير المرفوع
+      return all;
+    } catch (e) {
+      serverOnline = false;
+      console.warn('content sync offline, using local cache:', e && e.message);
+      return cacheAll().catch(() => []);
+    }
+  }
+  async function dbPut(item) {
+    await withPasscode(() => serverWrite('POST', { item }));
+    await cachePut(item).catch(() => {});
+  }
+  async function dbDelete(id) {
+    await withPasscode(() => serverWrite('DELETE', { id }));
+    await cacheDelete(id).catch(() => {});
+  }
+
+  // يرفع العناصر المحلية (المضافة قبل المزامنة) إلى الخادم
+  async function migrateLocal() {
+    const cached = await cacheAll();
+    const serverIds = new Set((await serverAll().catch(() => [])).map((it) => it.id));
+    const pending = cached.filter((it) => !serverIds.has(it.id));
+    for (const it of pending) {
+      await withPasscode(() => serverWrite('POST', { item: it }));
+    }
+    return pending.length;
   }
 
   const uid = () => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -319,6 +418,46 @@
   }
   function goHome() { if (typeof showScreen === 'function') showScreen('welcome-screen'); }
 
+  function writeErrorMsg(err) {
+    const m = String(err && err.message);
+    if (m === 'storage-not-configured') return 'الخادم غير مُهيّأ بعد (لم تُضبط خدمة التخزين).';
+    if (m === 'unauthorized') return 'رمز المضيف غير صحيح.';
+    if (m.includes('Failed to fetch') || m.startsWith('POST') || m.startsWith('DELETE')) return 'تعذّر الاتصال بالخادم — تأكد من اتصالك بالإنترنت.';
+    return 'تعذّر الحفظ (قد تكون الصورة كبيرة جدًا).';
+  }
+
+  function renderSyncStatus(host) {
+    if (!host) return;
+    if (!serverOnline) {
+      host.innerHTML = `<div class="ce-sync ce-sync--offline">
+        <span>⚠️ غير متصل بخادم المزامنة — تُعرض نسخة محلية. الإضافة والتعديل تتطلب اتصالاً.</span>
+      </div>`;
+      return;
+    }
+    if (localOnlyIds.length) {
+      host.innerHTML = `<div class="ce-sync ce-sync--pending">
+        <span>لديك ${localOnlyIds.length} عنصرًا محليًا غير مرفوع لباقي الأجهزة.</span>
+        <button type="button" class="btn btn-primary btn-sm" id="ce-migrate">رفع للخادم الآن</button>
+      </div>`;
+      host.querySelector('#ce-migrate').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true; btn.textContent = 'جارٍ الرفع...';
+        try {
+          const n = await migrateLocal();
+          await reload();
+          renderPicker();
+          if (typeof setTaifSpeech === 'function') { /* optional */ }
+          window.alert(`تم رفع ${n} عنصرًا — صارت متاحة على كل الأجهزة.`);
+        } catch (err) {
+          btn.disabled = false; btn.textContent = 'رفع للخادم الآن';
+          window.alert(String(err && err.message) === 'unauthorized' ? 'رمز المضيف غير صحيح.' : 'تعذّر الرفع، حاول مرة أخرى.');
+        }
+      });
+      return;
+    }
+    host.innerHTML = `<div class="ce-sync ce-sync--ok"><span>✓ متزامن مع كل الأجهزة</span></div>`;
+  }
+
   function renderPicker() {
     const el = root();
     el.innerHTML = `
@@ -326,8 +465,10 @@
         <h2 class="screen-title">إدارة المحتوى</h2>
         <p class="ce-subtitle">اختر لعبة لعرض محتواها الحالي وتعديله أو إضافة جديد</p>
       </div>
+      <div id="ce-sync-status"></div>
       <div class="ce-game-grid" id="ce-game-grid"></div>
       <button class="btn btn-secondary" id="ce-home-btn">عودة للرئيسية</button>`;
+    renderSyncStatus(el.querySelector('#ce-sync-status'));
     const grid = el.querySelector('#ce-game-grid');
     GAME_ORDER.forEach((game) => {
       const count = activeCount(game);
@@ -511,7 +652,7 @@
         await reload();
         renderGameEditor(game);
       } catch (err) {
-        error.textContent = 'تعذّر الحفظ (قد تكون الصور كبيرة جدًا)';
+        error.textContent = writeErrorMsg(err);
         error.hidden = false;
         btn.disabled = false; btn.textContent = editing ? 'حفظ التعديل' : 'حفظ وإضافة';
       }
@@ -775,9 +916,11 @@
       });
       const revertEl = li.querySelector('.ce-item-revert');
       if (revertEl) revertEl.addEventListener('click', async () => {
-        await dbDelete('e:' + item.key);
-        await reload();
-        renderItems(game);
+        try {
+          await dbDelete('e:' + item.key);
+          await reload();
+          renderItems(game);
+        } catch (err) { window.alert(writeErrorMsg(err)); }
       });
       li.querySelector('.ce-item-del').addEventListener('click', () => toggleDelete(game, item));
       list.appendChild(li);
@@ -785,16 +928,18 @@
   }
 
   async function toggleDelete(game, item) {
-    if (item.source === 'user') {
-      if (!confirm('حذف هذا العنصر نهائيًا؟')) return;
-      await dbDelete(item.recordId);
-    } else if (item.deleted) {
-      await dbDelete('d:' + item.key); // restore
-    } else {
-      await dbPut({ id: 'd:' + item.key, game, kind: 'delete', targetKey: item.key, createdAt: Date.now() });
-    }
-    await reload();
-    renderItems(game);
+    try {
+      if (item.source === 'user') {
+        if (!confirm('حذف هذا العنصر نهائيًا؟')) return;
+        await dbDelete(item.recordId);
+      } else if (item.deleted) {
+        await dbDelete('d:' + item.key); // restore
+      } else {
+        await dbPut({ id: 'd:' + item.key, game, kind: 'delete', targetKey: item.key, createdAt: Date.now() });
+      }
+      await reload();
+      renderItems(game);
+    } catch (err) { window.alert(writeErrorMsg(err)); }
   }
 
   // ---- إقلاع ----------------------------------------------------------------

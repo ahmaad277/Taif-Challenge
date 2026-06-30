@@ -4046,3 +4046,30 @@ body.results-celebrating .celebration-confetti {
 .ce-spot-stage--ref .ce-spot-circle {
   cursor: default;
 }
+
+/* محرّر المحتوى — شريط حالة المزامنة مع الخادم */
+.ce-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+.ce-sync--ok {
+  background-color: rgba(92, 219, 149, 0.14);
+  color: var(--color-success);
+}
+
+.ce-sync--offline {
+  background-color: rgba(255, 107, 107, 0.14);
+  color: var(--color-error);
+}
+
+.ce-sync--pending {
+  background-color: rgba(240, 199, 94, 0.16);
+  color: var(--color-gold);
+}
